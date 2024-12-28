@@ -1,0 +1,10 @@
+[package]
+name = "SimpleDB"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ractor = "0.13"
+tokio = {version = "1.41.1", features = ["rt-multi-thread"]}
+log = "0.4.22"
+simplelog = "^0.12.0"

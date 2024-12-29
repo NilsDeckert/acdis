@@ -1,15 +1,24 @@
+use convert::AsFrame;
 use ractor::{Actor, async_trait, ActorRef, ActorProcessingErr, RpcReplyPort, Message};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
-use std::iter::Map;
-use std::ops::Deref;
 use log::{info, error};
+use redis_protocol_bridge::util::{*};
 
 pub struct DBActor;
 
 pub enum MapEntry {
     STRING(String),
     USIZE(usize),
+}
+
+impl From<MapEntry> for redis_protocol::resp3::types::OwnedFrame {
+    fn from(item: MapEntry) -> Self {
+        match item {
+            MapEntry::STRING(s) => {s.as_frame()}
+            MapEntry::USIZE(u) => {u.as_frame()}
+        }
+    }
 }
 
 impl Clone for MapEntry {
@@ -42,10 +51,19 @@ impl Actor for DBActor {
     type State = HashMap<String, MapEntry>;
     type Arguments = ();
 
-    async fn pre_start<'life1>
-    (&'life1 self, _myself: ActorRef<Self::Msg>, _args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
-        let hashmap = HashMap::new();
+    async fn pre_start(&self, myself: ActorRef<Self::Msg>, _args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
         info!("Initializing...");
+        let hashmap = HashMap::new();
+        let group_name = "acdis".to_string();
+
+        ractor::pg::join(
+            group_name.to_owned(),
+            vec![myself.get_cell()]
+        );
+
+        let members = ractor::pg::get_members(&group_name);
+        info!("We're one of {} actors in this cluster", members.len());
+
         Ok(hashmap)
     }
 

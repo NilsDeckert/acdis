@@ -16,12 +16,12 @@ impl Actor for ParseRequestActor {
     type State = ();
     type Arguments = ();
 
-    async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
+    async fn pre_start(&self, _myself: ActorRef<Self::Msg>, _args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
         debug!("Spawning parsing actor...");
         Ok(())
     }
 
-    /// Given an [`OwnedFrame`], parse it to a [`redis_protocol_bridge::commands::parse::Request`] and forward that request to a
+    /// Given an [`OwnedFrame`], parse it to a [`Request`] and forward that request to a
     /// [`actor::DBActor`]
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         let query = redis_protocol_bridge::parse_owned_frame(message.frame);

@@ -27,8 +27,10 @@ fn setup_logging() {
 
     CombinedLogger::init(
         vec![
-            TermLogger::new(LevelFilter::Warn, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
-            TermLogger::new(LevelFilter::Info, logconfig, TerminalMode::Mixed, ColorChoice::Auto),
+            TermLogger::new(LevelFilter::Info,  logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
+            TermLogger::new(LevelFilter::Warn,  logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
+            TermLogger::new(LevelFilter::Error, logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
+            // TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
         ]
     ).unwrap();
 }
@@ -103,17 +105,48 @@ async fn send_tcp_reply(stream: &mut TcpStream, reply: OwnedFrame) {
     stream.flush().await.unwrap()
 }
 
+/// Divide the value range 0..[`u64::MAX`] into equally sized parts.
+/// 
+/// # Arguments 
+/// 
+/// * `chunks`: Number of chunks to return. MUST be power of two.
+/// 
+/// returns: Vec<(u64, u64), Global> 
+fn chunk_ranges(chunks: u64) -> Vec<(u64, u64)> {
+
+    assert!(chunks.is_power_of_two());
+
+    let values_per_chunk = u64::MAX / chunks;
+    let mut ranges: Vec<(u64, u64)> = Vec::new();
+
+    (0..chunks).for_each(|i| {
+        let start = i * values_per_chunk;
+        let end = if i == chunks - 1 { u64::MAX } else { start + values_per_chunk - 1 };
+
+        ranges.push((start, end));
+    });
+    
+    ranges
+}
+
 #[tokio::main]
 async fn main() {
     setup_logging();
 
-    info!("Spawning initial actor");
-    let (_dbactor, _handler) = Actor::spawn(
-        Some("DB Actor".to_string()),
-        DBActor,
-        ()
-    ).await.expect("Failed to spawn DBActor");
+    /* Key space partitioning */
+    let chunks = 2_u64.pow(3);
 
+    info!("Spawning initial actors");
+    for (start, end) in chunk_ranges(chunks) {
+       let (_actor, _handler) = Actor::spawn(
+           Some(format!("DB Actor ({:#x}, {:#x})", start, end)),
+           DBActor,
+           (start, end)
+       ).await.expect("Failed to spawn db actor");
+    }
+
+    /* Setup redis port */
+    // TODO: Do this using an actor, spawning other actors per session
     let address = "0.0.0.0:6379";
     let listener = TcpListener::bind(address)
         .await
@@ -126,6 +159,9 @@ async fn main() {
             .await
             .expect("Failed to accept connection");
 
+        // TODO: Use actor here instead of tokio call
+        // - Call actor::spawn instead of tokio::spawn()
+        //  i.e. use actor that takes in a stream
         tokio::spawn(async move {
             handle_client(tcp_stream, socket_addr).await;
         });

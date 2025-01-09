@@ -1,4 +1,4 @@
-/// This module contains the code for the [`message::DBMessage`] that
+/// This module contains the code for the [`message::DBRequest`] that
 /// is used to communicate with the [`actor::DBActor`].
 /// This includes trait implementations to conveniently convert between types.
 pub mod message;

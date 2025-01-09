@@ -1,10 +1,8 @@
 use std::hash::{DefaultHasher, Hasher};
 use log::{debug, error};
-use ractor::{async_trait, call, cast, Actor, ActorErr, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, call, cast, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
-use crate::db_actor;
-use crate::db_actor::actor;
 use crate::db_actor::message::{DBMessage, DBRequest};
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
 

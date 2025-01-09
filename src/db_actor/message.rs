@@ -8,6 +8,7 @@ pub struct DBRequest {
 }
 
 pub enum DBMessage {
+    #[allow(dead_code)]
     QueryKeyspace(RpcReplyPort<(u64, u64)>),
     Responsible(u64, RpcReplyPort<bool>),
     Request(DBRequest)

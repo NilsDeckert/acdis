@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
-use std::ops::RangeBounds;
+use std::hash::Hasher;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol::error::RedisProtocolError;
 use log::{debug, info, warn};
@@ -10,7 +9,7 @@ use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{command, hello, info, ping, select};
 use redis_protocol_bridge::util::convert::AsFrame;
 use crate::db_actor::map_entry::MapEntry;
-use crate::db_actor::message::{DBMessage, DBRequest};
+use crate::db_actor::message::DBMessage;
 
 
 pub struct DBActor;

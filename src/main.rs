@@ -1,6 +1,6 @@
 use log::{debug, error, info, warn, Level, LevelFilter};
-use ractor::{call, cast, Actor, ActorRef};
-use simplelog::{Color, ColorChoice, CombinedLogger, Config, ConfigBuilder, TermLogger, TerminalMode};
+use ractor::Actor;
+use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 
 use std::net::SocketAddr;
 use ractor::rpc::CallResult;

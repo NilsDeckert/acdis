@@ -21,3 +21,11 @@ harness = false
 [[bench]]
 name = "rust_channels"
 harness = false
+
+[[bench]]
+name = "spawn"
+harness = false
+
+[[bench]]
+name = "messages"
+harness = false

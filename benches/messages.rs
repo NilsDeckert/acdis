@@ -1,3 +1,5 @@
+use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 use ractor::{async_trait, call, Actor, ActorProcessingErr, RpcReplyPort, ActorRef};
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
@@ -32,36 +34,41 @@ impl Actor for BenchActor {
 
 }
 
-async fn spawn_actor() {
-    let (_actor1, handle) =
-        Actor::spawn(None, BenchActor, ()).await
-            .expect("Failed to start actor");
-
-    drop(handle);
-}
-async fn call_actor(actor: ActorRef<BenchMessage>, num: usize) {
+async fn call_actor(actor: &ActorRef<BenchMessage>, num: usize) {
     for _ in 0..num {
         call!(actor, BenchMessage::Foo).expect("RPC failed");
     }
 }
 
-fn criterion_benchmark(c: &mut Criterion) {
-    let rt = tokio::runtime::Runtime::new().unwrap();
-    c.bench_function("Spawn actor", |b| {
-        b.to_async(&rt).iter(|| black_box(spawn_actor()));
-    });
-    
-    let mut actors: Vec<ActorRef<BenchMessage>> = Vec::new();
-    
-    rt.block_on(async {
-        let (actor, _handle) = Actor::spawn(None, BenchActor, ()).await.unwrap();
-        actors.push(actor);
-    });
+fn send_messages_through_channels(tx: &Sender<String>, rx: &Receiver<String>, num: usize) {
+    for _ in 0..num {
+        tx.send(String::from("Ping")).unwrap();
+    }
 
-    c.bench_function("Call actor", |b| {
-        b.iter(|| {
-            black_box(call_actor(actors.first().unwrap().clone(), 10_000))
+    for _ in 0..num {
+        rx.recv().unwrap();
+    }
+
+}
+fn criterion_benchmark(c: &mut Criterion) {
+    let mut group = c.benchmark_group("messages");
+    let messages = 1_000;
+
+    group.bench_function("Message passing actors", |b| {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let mut actors: Vec<ActorRef<BenchMessage>> = Vec::new();
+        rt.block_on(async {
+            let (actor, _handle) = Actor::spawn(None, BenchActor, ()).await.unwrap();
+            actors.push(actor);
         });
+        b.to_async(&rt).iter(|| black_box(call_actor(&actors.first().unwrap(), messages)));
+    });
+    
+    group.bench_function("Message passing rust channels", |b| {
+        let (tx, rx) = mpsc::channel();
+        b.iter(move || {
+            black_box(send_messages_through_channels(&tx, &rx, messages));
+        })
     });
 }
 

@@ -1,21 +1,19 @@
 use log::{debug, error, info, warn, Level, LevelFilter};
-use ractor::Actor;
+use ractor::{cast, Actor};
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 
-use std::net::SocketAddr;
-use ractor::rpc::CallResult;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::{TcpListener, TcpStream};
+use tokio::net::TcpStream;
 
 use redis_protocol::resp3::*;
 use redis_protocol::resp3::types::*;
-use redis_protocol_bridge::util::convert::AsFrame;
 use db_actor::actor::DBActor;
-use crate::parse_actor::parse_request_actor::ParseRequestActor;
-use crate::parse_actor::parse_request_message::ParseRequestMessage;
+use crate::tcp_listener_actor::tcp_listener::TcpListenerActor;
 
 mod db_actor;
 mod parse_actor;
+mod tcp_listener_actor;
+mod tcp_connection_handler_actor;
 
 fn setup_logging() {
     let logconfig = ConfigBuilder::new()
@@ -33,41 +31,6 @@ fn setup_logging() {
             // TermLogger::new(LevelFilter::Debug, Config::default(), TerminalMode::Mixed, ColorChoice::Auto),
         ]
     ).unwrap();
-}
-
-async fn handle_client(mut stream: TcpStream, addr: SocketAddr) {
-    info!("Incoming connection from: {}", addr);
-    loop {
-        stream.readable().await.unwrap();
-        let mut buf = [0; 512];
-        if !write_stream_to_buf(&mut stream, &mut buf).await { break; }
-
-        let res_op = decode::complete::decode(&mut buf);
-        match res_op {
-            Ok(
-                Some((frame, _size))
-            ) => {
-                let (parse_ref, _parse_handle) = Actor::spawn(
-                    None, ParseRequestActor, ()
-                ).await.expect("Error spawning ParseRequestActor");
-
-                let response = parse_ref.call(
-                    |r| ParseRequestMessage{frame, caller: r},
-                    None
-                ).await.expect("Error handing off request to ParseRequestActor");
-
-                let reply = match response {
-                    CallResult::Success(response) => response,
-                    CallResult::Timeout => "Request timed out".as_frame(),
-                    CallResult::SenderError => "Error handling request".as_frame()
-                };
-
-                send_tcp_reply(&mut stream, reply).await;
-            }
-            Ok(None) => warn!("Received empty command"),
-            Err(e) => error!("Error: {}", e),
-        }
-    }
 }
 
 /// Read the TcpStream and write its contents to a buffer.
@@ -145,26 +108,10 @@ async fn main() {
        ).await.expect("Failed to spawn db actor");
     }
 
-    /* Setup redis port */
-    // TODO: Do this using an actor, spawning other actors per session
-    let address = "0.0.0.0:6379";
-    let listener = TcpListener::bind(address)
-        .await
-        .expect("Failed to open TCP Listener");
+    let (_tcp_actor, tcp_handler) = Actor::spawn(
+        Some(String::from("TcpListenerActor")),
+        TcpListenerActor,
+        String::from("0.0.0.0:6379")).await.expect("Failed to spawn tcp listener actor");
 
-    info!("Listening on {}", address);
-
-    loop {
-        let (tcp_stream, socket_addr) = listener.accept()
-            .await
-            .expect("Failed to accept connection");
-
-        // TODO: Use actor here instead of tokio call
-        // - Call actor::spawn instead of tokio::spawn()
-        //  i.e. use actor that takes in a stream
-        tokio::spawn(async move {
-            handle_client(tcp_stream, socket_addr).await;
-        });
-    }
-    
+    tcp_handler.await.unwrap();
 }

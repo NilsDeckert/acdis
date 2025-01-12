@@ -1,9 +1,7 @@
 use log::{info};
 use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef};
 use tokio::net::TcpListener;
-use tokio::task::block_in_place;
 use crate::tcp_connection_handler_actor::tcp_connection_handler::TcpConnectionHandler;
-use crate::write_stream_to_buf;
 
 pub struct TcpListenerActor;
 
@@ -22,7 +20,7 @@ impl Actor for TcpListenerActor {
         Ok(())
     }
 
-    async fn handle(&self, myself: ActorRef<Self::Msg>, connection: Self::Msg, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn handle(&self, _myself: ActorRef<Self::Msg>, connection: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         info!("Received connection");
         loop {
             let (tcp_stream, socket_addr) = connection.accept().await?;

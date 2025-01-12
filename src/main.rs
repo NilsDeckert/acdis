@@ -1,5 +1,5 @@
 use log::{debug, error, info, warn, Level, LevelFilter};
-use ractor::{cast, Actor};
+use ractor::Actor;
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 
 use tokio::io::{AsyncReadExt, AsyncWriteExt};

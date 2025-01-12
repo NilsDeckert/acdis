@@ -17,7 +17,7 @@ impl Actor for TcpConnectionHandler {
     type State = ();
     type Arguments = ();
 
-    async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
+    async fn pre_start(&self, _myself: ActorRef<Self::Msg>, _args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
         Ok(())
     }
 

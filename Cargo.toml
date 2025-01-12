@@ -14,6 +14,10 @@ redis-protocol-bridge = { git = "https://github.com/NilsDeckert/redis-protocol-b
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 
+[profile.release]
+codegen-units = 1
+lto = "fat"
+
 [[bench]]
 name = "ractor_message_passing"
 harness = false

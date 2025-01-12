@@ -61,23 +61,24 @@ impl Actor for DBActor {
     }
 
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, map: &mut Self::State) -> Result<(), ActorProcessingErr> {
-        info!("Received message");
         
         match message {
             DBMessage::QueryKeyspace(reply) => {
+                info!("Received keyspace query");
                 if !reply.is_closed() {
                     reply.send(map.range)?;
                 }
                 Ok(())
             }
             DBMessage::Responsible(hash, reply) => {
+                info!("Received responsibility check");
                 if !reply.is_closed() {
                     reply.send((map.range.0 .. map.range.1).contains(&hash))?
                 }
                 Ok(())
             }
             DBMessage::Request(req) => {
-
+                info!("Received request");
                 let reply = self.handle_request(req.request, map);
                 
                 match reply {

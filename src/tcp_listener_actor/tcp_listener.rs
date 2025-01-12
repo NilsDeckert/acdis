@@ -21,17 +21,16 @@ impl Actor for TcpListenerActor {
     }
 
     async fn handle(&self, _myself: ActorRef<Self::Msg>, connection: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
-        info!("Received connection");
         loop {
             let (tcp_stream, socket_addr) = connection.accept().await?;
+            info!("Accepting connection from: {}", socket_addr);
             // TODO spawn_linked
-            let (connection_actor, connection_actor_handle) = Actor::spawn(
+            let (connection_actor, _connection_actor_handle) = Actor::spawn(
                 None, // TODO
                 TcpConnectionHandler,
                 ()
             ).await?;
             cast!(connection_actor, (tcp_stream, socket_addr))?;
-            connection_actor_handle.await?;
         }
     }
 }

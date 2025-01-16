@@ -1,3 +1,6 @@
+extern crate core;
+
+use std::ops::Range;
 use log::{debug, error, info, warn, Level, LevelFilter};
 use ractor::Actor;
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
@@ -75,18 +78,18 @@ async fn send_tcp_reply(stream: &mut TcpStream, reply: OwnedFrame) {
 /// * `chunks`: Number of chunks to return. MUST be power of two.
 /// 
 /// returns: Vec<(u64, u64), Global> 
-fn chunk_ranges(chunks: u64) -> Vec<(u64, u64)> {
+fn chunk_ranges(chunks: u64) -> Vec<Range<u64>> {
 
     assert!(chunks.is_power_of_two());
 
     let values_per_chunk = u64::MAX / chunks;
-    let mut ranges: Vec<(u64, u64)> = Vec::new();
+    let mut ranges: Vec<Range<u64>> = Vec::new();
 
     (0..chunks).for_each(|i| {
         let start = i * values_per_chunk;
         let end = if i == chunks - 1 { u64::MAX } else { start + values_per_chunk - 1 };
 
-        ranges.push((start, end));
+        ranges.push(start .. end);
     });
     
     ranges
@@ -100,11 +103,11 @@ async fn main() {
     let chunks = 2_u64.pow(3);
 
     info!("Spawning initial actors");
-    for (start, end) in chunk_ranges(chunks) {
+    for range in chunk_ranges(chunks) {
        let (_actor, _handler) = Actor::spawn(
-           Some(format!("DB Actor ({:#x}, {:#x})", start, end)),
+           Some(format!("DB Actor {:#?}", range)),
            DBActor,
-           (start, end)
+           range
        ).await.expect("Failed to spawn db actor");
     }
 

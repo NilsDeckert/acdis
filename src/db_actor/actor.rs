@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
+use std::ops::Range;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol::error::RedisProtocolError;
 use log::{debug, info, warn};
@@ -16,7 +17,7 @@ pub struct DBActor;
 
 pub struct PartitionedHashMap {
     pub map: HashMap<String, MapEntry>,
-    pub range: (u64, u64),
+    pub range: Range<u64>,
 }
 
 impl PartitionedHashMap {
@@ -25,10 +26,10 @@ impl PartitionedHashMap {
         hasher.write(key.as_bytes());
         let hash = hasher.finish();
         
-        if (self.range.0 .. self.range.1).contains(&hash) {
+        if self.range.contains(&hash) {
             true
         } else {
-            debug!("Hash({:#x}) not in range ({:#x}, {:#x})", hash, self.range.0, self.range.1);
+            debug!("Hash({:#x}) not in range {:#?}", hash, self.range);
             false
         }
         
@@ -39,7 +40,7 @@ impl PartitionedHashMap {
 impl Actor for DBActor {
     type Msg = DBMessage;
     type State = PartitionedHashMap;
-    type Arguments = (u64, u64);
+    type Arguments = Range<u64>;
 
     /// Join group of actors
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
@@ -66,14 +67,14 @@ impl Actor for DBActor {
             DBMessage::QueryKeyspace(reply) => {
                 info!("Received keyspace query");
                 if !reply.is_closed() {
-                    reply.send(map.range)?;
+                    reply.send(map.range.clone())?;
                 }
                 Ok(())
             }
             DBMessage::Responsible(hash, reply) => {
                 info!("Received responsibility check");
                 if !reply.is_closed() {
-                    reply.send((map.range.0 .. map.range.1).contains(&hash))?
+                    reply.send(map.range.contains(&hash))?
                 }
                 Ok(())
             }

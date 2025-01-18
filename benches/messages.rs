@@ -1,6 +1,6 @@
 use std::sync::{mpsc, Arc};
 use std::sync::mpsc::{Receiver, Sender};
-use ractor::{async_trait, call, Actor, ActorProcessingErr, RpcReplyPort, ActorRef, cast};
+use ractor::{async_trait, Actor, ActorProcessingErr, RpcReplyPort, ActorRef, cast};
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 

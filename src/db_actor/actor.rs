@@ -65,21 +65,21 @@ impl Actor for DBActor {
         
         match message {
             DBMessage::QueryKeyspace(reply) => {
-                info!("Received keyspace query");
+                debug!("Received keyspace query");
                 if !reply.is_closed() {
                     reply.send(map.range.clone())?;
                 }
                 Ok(())
             }
             DBMessage::Responsible(hash, reply) => {
-                info!("Received responsibility check");
+                debug!("Received responsibility check");
                 if !reply.is_closed() {
                     reply.send(map.range.contains(&hash))?
                 }
                 Ok(())
             }
             DBMessage::Request(req) => {
-                info!("Received request");
+                debug!("Received request");
                 let reply = self.handle_request(req.request, map);
                 
                 match reply {

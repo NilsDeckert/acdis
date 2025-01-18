@@ -1,8 +1,10 @@
-use std::hash::{DefaultHasher, Hasher};
+use std::hash::Hasher;
 use log::{debug, error};
 use ractor::{async_trait, call, cast, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
+
+use crate::db_actor::AHasher;
 use crate::db_actor::message::{DBMessage, DBRequest};
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
 
@@ -122,7 +124,7 @@ impl ParseRequestActor {
         
     }
     
-    /// Hash the given key using the default hasher.
+    /// Hash the given key using [`crate::db_actor::actor::AHasher`]
     /// 
     /// # Arguments 
     /// 
@@ -139,7 +141,7 @@ impl ParseRequestActor {
     /// }
     /// ```
     fn hash(&self, key: &String) -> u64 {
-        let mut hasher = DefaultHasher::new();
+        let mut hasher = AHasher::default();
         hasher.write(key.as_bytes());
         hasher.finish()
     }

@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-use std::collections::hash_map::DefaultHasher;
 use std::hash::Hasher;
 use std::ops::Range;
 use redis_protocol::resp3::types::OwnedFrame;
@@ -9,9 +7,10 @@ use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{command, hello, info, ping, select};
 use redis_protocol_bridge::util::convert::AsFrame;
+
+use crate::db_actor::{AHasher, HashMap};
 use crate::db_actor::map_entry::MapEntry;
 use crate::db_actor::message::DBMessage;
-
 
 pub struct DBActor;
 
@@ -22,7 +21,8 @@ pub struct PartitionedHashMap {
 
 impl PartitionedHashMap {
     pub fn in_range(&self, key: &String) -> bool {
-        let mut hasher = DefaultHasher::new();
+        //let mut hasher = DefaultHasher::new();
+        let mut hasher = AHasher::default();
         hasher.write(key.as_bytes());
         let hash = hasher.finish();
         
@@ -45,8 +45,8 @@ impl Actor for DBActor {
     /// Join group of actors
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
         info!("Initializing...");
-
-        let map = PartitionedHashMap { map: HashMap::new(), range: args};
+        
+        let map = PartitionedHashMap { map: HashMap::default(), range: args};
         let group_name = "acdis".to_string();
 
         ractor::pg::join(

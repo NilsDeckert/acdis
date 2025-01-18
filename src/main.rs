@@ -1,7 +1,6 @@
 extern crate core;
 
-use std::ops::Range;
-use log::{debug, error, info, warn, Level, LevelFilter};
+use log::{debug, error, warn, Level, LevelFilter};
 use ractor::Actor;
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 
@@ -10,7 +9,6 @@ use tokio::net::TcpStream;
 
 use redis_protocol::resp3::*;
 use redis_protocol::resp3::types::*;
-use db_actor::actor::DBActor;
 use crate::tcp_listener_actor::tcp_listener::TcpListenerActor;
 
 mod db_actor;
@@ -23,7 +21,7 @@ fn setup_logging() {
         .set_level_color(Level::Error, Some(Color::Red))
         .set_level_color(Level::Warn, Some(Color::Yellow))
         .set_level_color(Level::Info, Some(Color::Green))
-        .set_target_level(LevelFilter::Info)
+        .set_target_level(LevelFilter::Error)
         .build();
 
     CombinedLogger::init(
@@ -71,45 +69,10 @@ async fn send_tcp_reply(stream: &mut TcpStream, reply: OwnedFrame) {
     stream.flush().await.unwrap()
 }
 
-/// Divide the value range 0..[`u64::MAX`] into equally sized parts.
-/// 
-/// # Arguments 
-/// 
-/// * `chunks`: Number of chunks to return. MUST be power of two.
-/// 
-/// returns: Vec<(u64, u64), Global> 
-fn chunk_ranges(chunks: u64) -> Vec<Range<u64>> {
-
-    assert!(chunks.is_power_of_two());
-
-    let values_per_chunk = u64::MAX / chunks;
-    let mut ranges: Vec<Range<u64>> = Vec::new();
-
-    (0..chunks).for_each(|i| {
-        let start = i * values_per_chunk;
-        let end = if i == chunks - 1 { u64::MAX } else { start + values_per_chunk - 1 };
-
-        ranges.push(start .. end);
-    });
-    
-    ranges
-}
 
 #[tokio::main]
 async fn main() {
     setup_logging();
-
-    /* Key space partitioning */
-    let chunks = 2_u64.pow(3);
-
-    info!("Spawning initial actors");
-    for range in chunk_ranges(chunks) {
-       let (_actor, _handler) = Actor::spawn(
-           Some(format!("DB Actor {:#?}", range)),
-           DBActor,
-           range
-       ).await.expect("Failed to spawn db actor");
-    }
 
     let (_tcp_actor, tcp_handler) = Actor::spawn(
         Some(String::from("TcpListenerActor")),

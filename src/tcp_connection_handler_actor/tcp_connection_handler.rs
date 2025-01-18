@@ -25,6 +25,9 @@ impl Actor for TcpConnectionHandler {
         let (mut stream, _addr) = message;
         loop {
             stream.readable().await.unwrap();
+            
+            // TODO: Check what happens if we receive != 1 frame
+            // Shift this by amount of bytes received
             let mut buf = [0; 512];
             if !write_stream_to_buf(&mut stream, &mut buf).await { break; }
 
@@ -33,6 +36,8 @@ impl Actor for TcpConnectionHandler {
                 Ok(
                     Some((frame, _size))
                 ) => {
+                    
+                   // TODO: Spawn this somewhere else and leave open to accept connections 
                     let (parse_ref, _parse_handle) = Actor::spawn(
                         None, ParseRequestActor, ()
                     ).await.expect("Error spawning ParseRequestActor");

@@ -1,3 +1,4 @@
+#[allow(unused_imports)]
 use fxhash::{FxHashMap, FxHasher};
 
 /// This module contains the code for the [`message::DBRequest`] that

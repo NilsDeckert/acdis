@@ -1,4 +1,4 @@
-use ractor::RpcReplyPort;
+use ractor::ActorRef;
 use redis_protocol::resp3::types::OwnedFrame;
 
 
@@ -10,5 +10,5 @@ use redis_protocol::resp3::types::OwnedFrame;
 /// directly to `caller`.
 pub struct ParseRequestMessage {
     pub frame: OwnedFrame,
-    pub caller: RpcReplyPort<OwnedFrame>
+    pub reply_to: ActorRef<OwnedFrame>
 }

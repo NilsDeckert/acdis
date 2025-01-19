@@ -1,11 +1,11 @@
 use std::ops::Range;
 use redis_protocol_bridge::commands::parse::Request;
-use ractor::RpcReplyPort;
+use ractor::{ActorRef, RpcReplyPort};
 use redis_protocol::resp3::types::OwnedFrame;
 
 pub struct DBRequest {
     pub request: Request,
-    pub caller: RpcReplyPort<OwnedFrame>
+    pub reply_to: ActorRef<OwnedFrame>
 }
 
 pub enum DBMessage {

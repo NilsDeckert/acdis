@@ -4,7 +4,8 @@ use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef, Supervision
 use ractor::SupervisionEvent::*;
 use tokio::net::TcpListener;
 use crate::db_actor::actor::DBActor;
-use crate::tcp_connection_handler_actor::tcp_connection_handler::TcpConnectionHandler;
+use crate::tcp_reader_actor::tcp_reader::{TcpReaderActor, TcpReaderMessage};
+use crate::tcp_writer_actor::tcp_writer::TcpWriterActor;
 
 pub struct TcpListenerActor;
 
@@ -22,7 +23,7 @@ impl Actor for TcpListenerActor {
         info!("Spawning initial DB actors");
         for range in chunk_ranges(chunks) {
             let (_actor, _handler) = Actor::spawn_linked(
-                Some(format!("DBActor {:#?}", range)),
+                Some(format!("DBActor {:#018x}..{:#018x}", range.start, range.end)),
                 DBActor,
                 range,
                 myself.get_cell()
@@ -30,28 +31,50 @@ impl Actor for TcpListenerActor {
         }
         
         /* Open TCP port to accept connections */
+        // TODO: use .into_split to split the TcpStream into listening and writing half
         info!("Listening on {}", address);
         let listener = TcpListener::bind(address)
             .await
             .expect("Failed to open TCP Listener");
+        
         cast!(myself, listener)?;
         Ok(())
     }
 
+    // This is only called once
     async fn handle(&self, myself: ActorRef<Self::Msg>, connection: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         // TODO: Move this to post_start?
+        // TODO: Because this is in a more or less infinite loop, it does not handle supervisor events.
         loop {
             let (tcp_stream, socket_addr) = connection.accept().await?;
             info!("Accepting connection from: {}", socket_addr);
-            let (connection_actor, _connection_actor_handle) = Actor::spawn_linked(
-                Some(format!("Connection Handler {}", socket_addr)),
-                TcpConnectionHandler,
-                (),
+            
+            let (reader, writer) = tcp_stream.into_split();
+            
+            let (write_actor, _write_actor_handle) = Actor::spawn_linked(
+                Some(format!("Stream Writer {}", socket_addr)),
+                TcpWriterActor,
+                writer,
                 myself.get_cell()
             ).await?;
             
+            // Clients usually keep their connections open. This means the spawned connection handler
+            // is alive and working until the client disconnects. -> It is okay to spawn a fresh actor
+            // for each client connection.
+            // TODO: Instead of spawning one actor that reads from and write to stream, spawn
+            //       one actor that reads and one that writes. This way, the read actor can start reading
+            //       the next packet without waiting for a reply.
+            //  - The writer has to know the reader but not the other way around
+            let (connection_actor, _connection_actor_handle) = Actor::spawn_linked(
+                Some(format!("Connection Handler {}", socket_addr)),
+                TcpReaderActor,
+                (reader, write_actor),
+                myself.get_cell()
+            ).await?;
+            
+            cast!(connection_actor, TcpReaderMessage)?;
+
             // TODO: Send message to yourself?
-            cast!(connection_actor, (tcp_stream, socket_addr))?;
         }
     }
 
@@ -61,7 +84,9 @@ impl Actor for TcpListenerActor {
             ActorStarted(cell) => {
                 info!("{} started", cell.get_name().unwrap_or(String::from("Actor")))
             },
-            ActorTerminated(_cell, _last_state, _reason) => {},
+            ActorTerminated(cell, _last_state, _reason) => {
+                info!("{} stopped", cell.get_name().unwrap_or(String::from("Actor")))
+            },
             ActorFailed(_cell, _error) => {},
             ProcessGroupChanged(_message) => {}
         }

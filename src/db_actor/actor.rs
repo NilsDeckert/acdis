@@ -3,7 +3,7 @@ use std::ops::Range;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol::error::RedisProtocolError;
 use log::{debug, info, warn};
-use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{command, hello, info, ping, select};
 use redis_protocol_bridge::util::convert::AsFrame;
@@ -84,12 +84,7 @@ impl Actor for DBActor {
                 
                 match reply {
                     Ok(frame) => {
-                        if req.caller.is_closed() {
-                            Err(ActorProcessingErr::from("Attempted to send reply but channel is closed."))
-                        } else {
-                            req.caller.send(frame)?;
-                            Ok(())
-                        }
+                        Ok(cast!(req.reply_to, frame)?)
                     },
 
                     Err(err) => {

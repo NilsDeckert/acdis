@@ -35,14 +35,7 @@ impl Actor for ParseRequestActor {
                     attributes: None
                 };
 
-                if message.caller.is_closed() {
-                    error!("Channel already closed");
-                    Err(ActorProcessingErr::from("Attempt to reply but channel is closed"))
-                } else {
-                    message.caller.send(err)?;
-                    Ok(())
-                }
-
+                Ok(message.reply_to.cast(err)?)
             }
 
             Ok(request) => {
@@ -51,7 +44,7 @@ impl Actor for ParseRequestActor {
                 cast!(
                     responsible,
                     DBMessage::Request(
-                        DBRequest{request, caller: message.caller}
+                        DBRequest{request, reply_to: message.reply_to}
                     )
                 )?;
                 Ok(())

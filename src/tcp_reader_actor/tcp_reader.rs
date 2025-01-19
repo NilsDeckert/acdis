@@ -8,13 +8,13 @@ use crate::parse_actor::parse_request_actor::ParseRequestActor;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
 
 /// This actor handles the reading part of a [`tokio::net::TcpStream`].
-/// 
-/// It is spawned with a [`OwnedReadHalf`] and the [`crate::tcp_writer_actor`] handling the writing 
+///
+/// It is spawned with a [`OwnedReadHalf`] and the [`crate::tcp_writer_actor`] handling the writing
 /// part of that stream. It constantly queries the stream for RESP3 frames and decodes them upon arrival.
 /// The decoded OwnedFrames are sent to a [`ParseRequestActor`] for further processing and handling
 /// of the request.
-/// 
-/// The result of the request is sent to the [`crate::tcp_writer_actor`] directly without going 
+///
+/// The result of the request is sent to the [`crate::tcp_writer_actor`] directly without going
 /// through this actor.
 pub struct TcpReaderActor;
 
@@ -28,16 +28,23 @@ impl Actor for TcpReaderActor {
     type Arguments = (OwnedReadHalf, ActorRef<OwnedFrame>);
 
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
-        info!("Spawning...");
         myself.cast(TcpReaderMessage)?;
         Ok(args)
     }
 
+    async fn post_stop(&self, myself: ActorRef<Self::Msg>, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+        myself.get_children().iter().for_each(|child| {
+            info!("Stopping {}...", child.get_name().unwrap_or(String::from("child")));
+            child.stop(Some("TCP Reader stopped.".into()));
+        });
+        Ok(())
+    }
+
     // TODO: Because of this loop{}, we only query the mailbox once, thus cannot handle supervisor messages
-    async fn handle(&self, _myself: ActorRef<Self::Msg>, _message: Self::Msg, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
-        let (stream, writer) = state; 
+    async fn handle(&self, myself: ActorRef<Self::Msg>, _message: Self::Msg, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+        let (stream, writer) = state;
         loop {
-            
+
             // TODO: Check if stream has new content, then send ourselves a message that input is available.
             //       Otherwise, send another message to query again.
             stream.readable().await.unwrap();
@@ -45,7 +52,9 @@ impl Actor for TcpReaderActor {
             // TODO: Check what happens if we receive != 1 frame
             // Shift this by amount of bytes received
             let mut buf = [0; 512];
-            if !write_stream_to_buf(stream, &mut buf).await { break; }
+            if !write_stream_to_buf(stream, &mut buf).await {
+                break;
+            }
 
             let res_op = decode::complete::decode(&mut buf);
             match res_op {
@@ -66,8 +75,11 @@ impl Actor for TcpReaderActor {
                 Err(e) => error!("Error: {}", e),
             }
         }
-        Ok(())
+        Ok(myself.stop(Some("Channel was closed.".into())))
     }
+
+
+
 }
 
 /// Read the TcpStream and write its contents to a buffer.

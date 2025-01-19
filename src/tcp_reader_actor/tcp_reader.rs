@@ -32,7 +32,7 @@ impl Actor for TcpReaderActor {
         Ok(args)
     }
 
-    async fn post_stop(&self, myself: ActorRef<Self::Msg>, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn post_stop(&self, myself: ActorRef<Self::Msg>, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         myself.get_children().iter().for_each(|child| {
             info!("Stopping {}...", child.get_name().unwrap_or(String::from("child")));
             child.stop(Some("TCP Reader stopped.".into()));

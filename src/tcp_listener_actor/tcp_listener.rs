@@ -1,6 +1,8 @@
+use std::io::ErrorKind::AddrInUse;
 use std::ops::Range;
+use std::process::exit;
 use futures::future::join_all;
-use log::{info};
+use log::{error, info};
 use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor::SupervisionEvent::*;
 use tokio::net::TcpListener;
@@ -28,7 +30,7 @@ impl Actor for CompanionActor {
 
     async fn post_start(&self, _myself: ActorRef<Self::Msg>, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         let (listener, send_to) = state;
-        
+
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await?;
             info!("Accepting connection from: {}", socket_addr);
@@ -64,19 +66,32 @@ impl Actor for TcpListenerActor {
         
         /* Open TCP port to accept connections */
         info!("Listening on {}", address);
-        let listener = TcpListener::bind(address)
-            .await
-            .expect("Failed to open TCP Listener");
+        let res = TcpListener::bind(address)
+            .await;
         
-        // Spawn an actor that polls the TcpListener for available connections
-        Actor::spawn_linked(
-            Some(String::from("TCP Poller")),
-            CompanionActor,
-            (listener, myself.clone()),
-            myself.get_cell()
-        ).await.expect("Failed to spawn TCP poller");
-
-        Ok(())
+        match res {
+            Ok(l) => {
+                let listener = l;
+                
+                // Spawn an actor that polls the TcpListener for available connections
+                Actor::spawn_linked(
+                    Some(String::from("TCP Poller")),
+                    CompanionActor,
+                    (listener, myself.clone()),
+                    myself.get_cell()
+                ).await.expect("Failed to spawn TCP poller");
+                
+                Ok(())
+            }
+            Err(e) => {
+                if e.kind() == AddrInUse {
+                    error!("Address already in use! Make sure no other instance is running");
+                    exit(-1);
+                } else {
+                    Err(e.into())
+                }
+            }
+        }
     }
 
     async fn handle(&self, myself: ActorRef<Self::Msg>, connection: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
@@ -101,11 +116,11 @@ impl Actor for TcpListenerActor {
             (reader, write_actor.clone()),
             myself.get_cell()
         ).await?;
-        
+
         // Let the read_actor supervise the write actor. This simplifies stopping the write_actor
         // when the stream is closed.
         write_actor.link(read_actor.get_cell());
-        
+
         Ok(())
     }
 

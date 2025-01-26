@@ -1,7 +1,8 @@
 use log::{error, info, warn};
-use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef, Message};
 use redis_protocol::resp3::decode;
 use redis_protocol::resp3::types::OwnedFrame;
+use redis_protocol_bridge::util::convert::SerializableFrame;
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::OwnedReadHalf;
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
@@ -20,12 +21,13 @@ pub struct TcpReaderActor;
 
 /// Dummy message that prompts us to start working
 pub struct TcpReaderMessage;
+impl Message for TcpReaderMessage {}
 
 #[async_trait]
 impl Actor for TcpReaderActor {
     type Msg = TcpReaderMessage;
-    type State = (OwnedReadHalf, ActorRef<OwnedFrame>);
-    type Arguments = (OwnedReadHalf, ActorRef<OwnedFrame>);
+    type State = (OwnedReadHalf, ActorRef<SerializableFrame>);
+    type Arguments = (OwnedReadHalf, ActorRef<SerializableFrame>);
 
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
         myself.cast(TcpReaderMessage)?;
@@ -43,10 +45,13 @@ impl Actor for TcpReaderActor {
     // TODO: Because of this loop{}, we only query the mailbox once, thus cannot handle supervisor messages
     async fn handle(&self, myself: ActorRef<Self::Msg>, _message: Self::Msg, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         let (stream, writer) = state;
+
+        let (parse_ref, _parse_handle) = Actor::spawn(
+            None, ParseRequestActor, ()
+        ).await.expect("Error spawning ParseRequestActor");
+        
         loop {
 
-            // TODO: Check if stream has new content, then send ourselves a message that input is available.
-            //       Otherwise, send another message to query again.
             stream.readable().await.unwrap();
             
             // TODO: Check what happens if we receive != 1 frame
@@ -61,15 +66,10 @@ impl Actor for TcpReaderActor {
                 Ok(
                     Some((frame, _size))
                 ) => {
-                    
-                   // TODO: Spawn this somewhere else and leave open to accept connections 
-                    let (parse_ref, _parse_handle) = Actor::spawn(
-                        None, ParseRequestActor, ()
-                    ).await.expect("Error spawning ParseRequestActor");
 
                     // This sends the request to the ParseRequestActor.
                     // The reply will be received and written onto the stream by `writer`
-                    parse_ref.cast(ParseRequestMessage{frame, reply_to: writer.clone() })?;
+                    // TODO: parse_ref.cast(ParseRequestMessage{frame, reply_to: writer.clone() })?;
                 }
                 Ok(None) => warn!("Received empty command"),
                 Err(e) => error!("Error: {}", e),

@@ -1,11 +1,13 @@
 use std::sync::mpsc;
-use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef, Message};
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use std::sync::mpsc::Sender;
 
 struct BenchActor;
 enum BenchMessage {}
+
+impl Message for BenchMessage {}
 
 #[async_trait]
 impl Actor for BenchActor {

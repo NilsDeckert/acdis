@@ -3,7 +3,7 @@ use log::{debug, error};
 use ractor::{async_trait, call, cast, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
-
+use redis_protocol_bridge::util::convert::SerializableFrame;
 use crate::db_actor::AHasher;
 use crate::db_actor::message::{DBMessage, DBRequest};
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
@@ -24,7 +24,7 @@ impl Actor for ParseRequestActor {
     /// Given an [`OwnedFrame`], parse it to a [`Request`] and forward that request to a
     /// [`actor::DBActor`]
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
-        let query = redis_protocol_bridge::parse_owned_frame(message.frame);
+        let query = redis_protocol_bridge::parse_owned_frame(message.frame.0);
         let request = redis_protocol_bridge::commands::parse::parse(query);
 
         match request {
@@ -35,7 +35,8 @@ impl Actor for ParseRequestActor {
                     attributes: None
                 };
 
-                Ok(message.reply_to.cast(err)?)
+                // TODO: Ok(message.reply_to.cast(SerializableFrame(err))?)
+                Ok(())
             }
 
             Ok(request) => {
@@ -44,7 +45,7 @@ impl Actor for ParseRequestActor {
                 cast!(
                     responsible,
                     DBMessage::Request(
-                        DBRequest{request, reply_to: message.reply_to}
+                        DBRequest{request }//, reply_to: message.reply_to}
                     )
                 )?;
                 Ok(())

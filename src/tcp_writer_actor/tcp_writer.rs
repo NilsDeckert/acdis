@@ -2,6 +2,7 @@ use log::debug;
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::encode;
 use redis_protocol::resp3::types::{OwnedFrame, Resp3Frame};
+use redis_protocol_bridge::util::convert::SerializableFrame;
 use tokio::io::AsyncWriteExt;
 use tokio::net::tcp::OwnedWriteHalf;
 
@@ -12,7 +13,7 @@ pub struct TcpWriterActor;
 
 #[async_trait]
 impl Actor for TcpWriterActor {
-    type Msg = OwnedFrame;
+    type Msg = SerializableFrame;
     type State = OwnedWriteHalf;
     type Arguments = OwnedWriteHalf;
 
@@ -21,7 +22,7 @@ impl Actor for TcpWriterActor {
     }
 
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, write_half: &mut Self::State) -> Result<(), ActorProcessingErr> {
-        send_tcp_reply(write_half, message).await;
+        send_tcp_reply(write_half, message.0).await;
         Ok(())
     }
 }

@@ -44,8 +44,6 @@ impl Actor for DBActor {
 
     /// Join group of actors
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
-        info!("Initializing...");
-        
         let map = PartitionedHashMap { map: HashMap::default(), range: args};
         let group_name = "acdis".to_string();
 
@@ -57,7 +55,6 @@ impl Actor for DBActor {
         let members = ractor::pg::get_members(&group_name);
         info!("We're one of {} actors in this cluster", members.len());
 
-
         Ok(map)
     }
 
@@ -67,7 +64,7 @@ impl Actor for DBActor {
             DBMessage::QueryKeyspace(reply) => {
                 debug!("Received keyspace query");
                 if !reply.is_closed() {
-                    reply.send(map.range.clone())?;
+                    reply.send(vec!(map.range.start, map.range.end))?;
                 }
                 Ok(())
             }
@@ -84,7 +81,8 @@ impl Actor for DBActor {
                 
                 match reply {
                     Ok(frame) => {
-                        Ok(cast!(req.reply_to, frame)?)
+                        // TODO: Ok(cast!(req.reply_to, frame)?)
+                        Ok(())
                     },
 
                     Err(err) => {

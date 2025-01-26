@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::process::exit;
 use futures::future::join_all;
 use log::{error, info};
-use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
+use ractor::{cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent, async_trait, Message};
 use ractor::SupervisionEvent::*;
 use tokio::net::TcpListener;
 use crate::db_actor::actor::DBActor;
@@ -17,6 +17,7 @@ pub struct TcpConnectionMessage {
     pub tcp_stream: tokio::net::TcpStream,
     pub socket_addr: core::net::SocketAddr,
 }
+impl Message for TcpConnectionMessage {}
 
 #[async_trait]
 impl Actor for CompanionActor {
@@ -49,9 +50,9 @@ impl Actor for TcpListenerActor {
 
         /* Number of chunk to split key space into */
         let chunks = 2_u64.pow(3);
-        let mut handles = Vec::new();
+        //let mut handles = Vec::new();
 
-        info!("Spawning initial DB actors");
+/*        info!("Spawning initial DB actors");
         for range in chunk_ranges(chunks) {
             handles.push(tokio::spawn({
                 Actor::spawn_linked(
@@ -63,6 +64,8 @@ impl Actor for TcpListenerActor {
             }));
         }
         join_all(handles).await;
+*/       
+        
         
         /* Open TCP port to accept connections */
         info!("Listening on {}", address);
@@ -134,7 +137,8 @@ impl Actor for TcpListenerActor {
                 info!("{} stopped", cell.get_name().unwrap_or(String::from("Actor")));
             },
             ActorFailed(_cell, _error) => {},
-            ProcessGroupChanged(_message) => {}
+            ProcessGroupChanged(_message) => {},
+            _ => {/* Just to silence IDE*/}
         }
         Ok(())
     }
@@ -147,7 +151,7 @@ impl Actor for TcpListenerActor {
 /// * `chunks`: Number of chunks to return. MUST be power of two.
 ///
 /// returns: Vec<(u64, u64), Global> 
-fn chunk_ranges(chunks: u64) -> Vec<Range<u64>> {
+pub fn chunk_ranges(chunks: u64) -> Vec<Range<u64>> {
 
     assert!(chunks.is_power_of_two());
 

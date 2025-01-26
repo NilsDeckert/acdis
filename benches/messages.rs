@@ -1,6 +1,6 @@
 use std::sync::{mpsc, Arc};
 use std::sync::mpsc::{Receiver, Sender};
-use ractor::{async_trait, Actor, ActorProcessingErr, RpcReplyPort, ActorRef, cast};
+use ractor::{async_trait, Actor, ActorProcessingErr, RpcReplyPort, ActorRef, cast, Message};
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 
@@ -11,6 +11,8 @@ enum BenchMessage {
     Foo(RpcReplyPort<String>),
     Bar()
 }
+
+impl Message for BenchMessage {}
 
 #[async_trait]
 impl Actor for BenchActor {
@@ -39,11 +41,12 @@ impl Actor for BenchActor {
 }
 
 async fn call_actor(actor: Arc<ActorRef<BenchMessage>>, num: usize) {
+    // TODO: Move this out of benchmark, allocate with proper size
     let mut handles = Vec::new();
     
     for _ in 0..num {
         let actor2 = actor.clone();
-        handles.push(tokio::spawn(async move {
+        handles.push(tokio::spawn(async move { // TODO: Don't use tokio::spawn, put future into vec
             actor2.call(BenchMessage::Foo, None).await.unwrap()
         }));
     }
@@ -118,6 +121,8 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("tokio mpsc", |b| {
         b.to_async(&rt).iter(move || black_box(tokio_mpsc(messages)));
     });
+    
+    // TODO: actor_cell.send_message()
 
 }
 

@@ -1,16 +1,22 @@
 use std::ops::Range;
 use redis_protocol_bridge::commands::parse::Request;
-use ractor::{ActorRef, RpcReplyPort};
-use redis_protocol::resp3::types::OwnedFrame;
+use ractor::{ActorRef, BytesConvertable, RpcReplyPort};
+use ractor_cluster::RactorClusterMessage;
+use redis_protocol_bridge::util::convert::SerializableFrame;
 
+#[derive(RactorClusterMessage)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct DBRequest {
     pub request: Request,
-    pub reply_to: ActorRef<OwnedFrame>
+    // pub reply_to: ActorRef<SerializableFrame> // TODO: This causes problems when serializing
 }
 
+#[derive(RactorClusterMessage)]
 pub enum DBMessage {
     #[allow(dead_code)]
-    QueryKeyspace(RpcReplyPort<Range<u64>>),
+    #[rpc]
+    QueryKeyspace(RpcReplyPort<Vec<u64>>),
+    #[rpc]
     Responsible(u64, RpcReplyPort<bool>),
     Request(DBRequest)
 }

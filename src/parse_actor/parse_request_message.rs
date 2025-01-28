@@ -13,5 +13,5 @@ use redis_protocol_bridge::util::convert::SerializableFrame;
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct ParseRequestMessage {
     pub frame: SerializableFrame,
-    // pub reply_to: ActorRef<SerializableFrame> // TODO: This causes problems in serialization
+    pub reply_to: String
 }

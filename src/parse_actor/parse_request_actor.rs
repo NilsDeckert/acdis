@@ -24,8 +24,14 @@ impl Actor for ParseRequestActor {
     /// Given an [`OwnedFrame`], parse it to a [`Request`] and forward that request to a
     /// [`actor::DBActor`]
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+        debug!("Handling parse request");
         let query = redis_protocol_bridge::parse_owned_frame(message.frame.0);
         let request = redis_protocol_bridge::commands::parse::parse(query);
+        
+        let reply_to_vec = ractor::pg::get_members(&message.reply_to);
+        assert_eq!(reply_to_vec.len(), 1,
+                   "Found less than or more than one actor for {}", message.reply_to);
+        let reply_to = reply_to_vec.into_iter().next().unwrap();
 
         match request {
             Err(err) => {
@@ -35,8 +41,7 @@ impl Actor for ParseRequestActor {
                     attributes: None
                 };
 
-                // TODO: Ok(message.reply_to.cast(SerializableFrame(err))?)
-                Ok(())
+                Ok(reply_to.send_message(SerializableFrame(err))?)
             }
 
             Ok(request) => {
@@ -45,7 +50,7 @@ impl Actor for ParseRequestActor {
                 cast!(
                     responsible,
                     DBMessage::Request(
-                        DBRequest{request }//, reply_to: message.reply_to}
+                        DBRequest{request, reply_to: message.reply_to}
                     )
                 )?;
                 Ok(())
@@ -111,8 +116,10 @@ impl ParseRequestActor {
         }
         
         if let Some(member) = ractor::pg::get_members(&group_name).first() {
+            debug!("Responsible actor: {}", member.get_id());
             Ok(ActorRef::<DBMessage>::from(member.clone()))
         } else {
+            error!("Couldn't find responsible actor");
             Err(ActorProcessingErr::from("No actor responsible for this key"))
         }
         

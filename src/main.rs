@@ -2,7 +2,7 @@ extern crate core;
 
 use ractor::{cast, Actor};
 
-use log::{info, Level, LevelFilter};
+use log::{debug, info, Level, LevelFilter};
 use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
 use ractor_cluster::{NodeEventSubscription, NodeServer};
 use ractor_cluster::NodeServerMessage::SubscribeToEvents;
@@ -21,12 +21,13 @@ fn setup_logging() {
         .set_level_color(Level::Error, Some(Color::Red))
         .set_level_color(Level::Warn, Some(Color::Yellow))
         .set_level_color(Level::Info, Some(Color::Green))
-        .set_target_level(LevelFilter::Error)
+        .set_level_color(Level::Debug, Some(Color::Blue))
+        .set_target_level(LevelFilter::Debug)
         .build();
 
     CombinedLogger::init(
         vec![
-            TermLogger::new(LevelFilter::Info,  logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
+            TermLogger::new(LevelFilter::Debug,  logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
         ]
     ).unwrap();
 }
@@ -35,48 +36,50 @@ struct subscription;
 
 impl NodeEventSubscription for subscription {
     fn node_session_opened(&self, ses: NodeServerSessionInformation) {
-        info!("Session opened: \n\
-            node_id:    {:#?} \n\
-            peer_addr:  {:#?} \n\
-            peer_name:  {:#?} \n\
-            is_server:  {:#?}",
-            ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
-        
-        let registered = ractor::registry::registered();
-        info!("Registered: {:#?}", registered);
-        
-        let pids = ractor::registry::get_all_pids();
-        info!("Pids: {:#?}", pids);
-        info!("\n\n\n\n\n\n")
+        // info!("Session opened: \n\
+        //     node_id:    {:#?} \n\
+        //     peer_addr:  {:#?} \n\
+        //     peer_name:  {:#?} \n\
+        //     is_server:  {:#?}",
+        //     ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
+        // 
+        // let registered = ractor::registry::registered();
+        // info!("Registered: {:#?}", registered);
+        // 
+        // let pids = ractor::registry::get_all_pids();
+        // info!("Pids: {:#?}", pids);
+        // info!("\n\n\n\n\n\n")
     }
 
     fn node_session_disconnected(&self, ses: NodeServerSessionInformation) {
-        info!("Session disconnected: {:#?}", ses.node_id);
+        // info!("Session disconnected: {:#?}", ses.node_id);
     }
 
     fn node_session_authenicated(&self, ses: NodeServerSessionInformation) {
-        info!("Session authenticated: {:#?}", ses.node_id);
+        // info!("Session authenticated: {:#?}", ses.node_id);
     }
 
     fn node_session_ready(&self, ses: NodeServerSessionInformation) {
-        info!("Session ready: \n\
-            node_id:    {:#?} \n\
-            peer_addr:  {:#?} \n\
-            peer_name:  {:#?} \n\
-            is_server:  {:#?}",
-            ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
-
-        let registered = ractor::registry::registered();
-        info!("Registered: {:#?}", registered);
-
-        let pids = ractor::registry::get_all_pids();
-        info!("Pids: {:#?}", pids);
+        info!("Session ready: {:?}", ses.peer_name);
+        // info!("Session ready: \n\
+        //     node_id:    {:#?} \n\
+        //     peer_addr:  {:#?} \n\
+        //     peer_name:  {:#?} \n\
+        //     is_server:  {:#?}",
+        //     ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
+        // 
+        // let registered = ractor::registry::registered();
+        // info!("Registered: {:#?}", registered);
+        // 
+        // let pids = ractor::registry::get_all_pids();
+        // info!("Pids: {:#?}", pids);
     }
 }
 
 #[tokio::main]
 async fn main() {
     setup_logging();
+    debug!("HALLO");
 
     let server = NodeServer::new(
         std::env::var("CLUSTER_PORT").unwrap_or(String::from("6381")).parse().unwrap(),

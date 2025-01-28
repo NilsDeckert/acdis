@@ -6,7 +6,7 @@ use log::{debug, info, warn};
 use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{command, hello, info, ping, select};
-use redis_protocol_bridge::util::convert::AsFrame;
+use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 
 use crate::db_actor::{AHasher, HashMap};
 use crate::db_actor::map_entry::MapEntry;
@@ -81,8 +81,12 @@ impl Actor for DBActor {
                 
                 match reply {
                     Ok(frame) => {
-                        // TODO: Ok(cast!(req.reply_to, frame)?)
-                        Ok(())
+                        let reply_to_vec = ractor::pg::get_members(&req.reply_to);
+                        assert_eq!(reply_to_vec.len(), 1,
+                                   "Found less than or more than one actors for {}", req.reply_to);
+                        let reply_to = reply_to_vec.into_iter().next().unwrap();
+                        
+                        Ok(reply_to.send_message(SerializableFrame(frame))?)
                     },
 
                     Err(err) => {

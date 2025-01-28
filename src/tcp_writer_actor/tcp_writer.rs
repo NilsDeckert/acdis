@@ -1,4 +1,4 @@
-use log::debug;
+use log::{debug, info};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::encode;
 use redis_protocol::resp3::types::{OwnedFrame, Resp3Frame};
@@ -17,7 +17,14 @@ impl Actor for TcpWriterActor {
     type State = OwnedWriteHalf;
     type Arguments = OwnedWriteHalf;
 
-    async fn pre_start(&self, _myself: ActorRef<Self::Msg>, write_half: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
+    async fn pre_start(&self, myself: ActorRef<Self::Msg>, write_half: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
+        // Join process group to facilitate cross-node addressing
+        info!("Joining pg {}", write_half.peer_addr().unwrap().to_string());
+        ractor::pg::join(
+            write_half.peer_addr().unwrap().to_string(),
+            vec![myself.get_cell()]
+        );
+        
         Ok(write_half)
     }
 

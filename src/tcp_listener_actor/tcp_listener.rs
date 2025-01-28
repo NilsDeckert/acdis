@@ -2,9 +2,10 @@ use std::io::ErrorKind::AddrInUse;
 use std::ops::Range;
 use std::process::exit;
 use futures::future::join_all;
-use log::{error, info};
+use log::{debug, error, info};
 use ractor::{cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent, async_trait, Message};
 use ractor::SupervisionEvent::*;
+use ractor_cluster::RactorMessage;
 use tokio::net::TcpListener;
 use crate::db_actor::actor::DBActor;
 use crate::tcp_reader_actor::tcp_reader::TcpReaderActor;
@@ -13,11 +14,12 @@ use crate::tcp_writer_actor::tcp_writer::TcpWriterActor;
 pub struct TcpListenerActor;
 
 struct CompanionActor;
+
+#[derive(RactorMessage)]
 pub struct TcpConnectionMessage {
     pub tcp_stream: tokio::net::TcpStream,
     pub socket_addr: core::net::SocketAddr,
 }
-impl Message for TcpConnectionMessage {}
 
 #[async_trait]
 impl Actor for CompanionActor {
@@ -98,6 +100,7 @@ impl Actor for TcpListenerActor {
     }
 
     async fn handle(&self, myself: ActorRef<Self::Msg>, connection: Self::Msg, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+        debug!("Received Message");
         let TcpConnectionMessage{ tcp_stream, socket_addr} = connection;
 
         // Split stream into reader and writer to allow for concurrent reading and writing

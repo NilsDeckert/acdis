@@ -1,14 +1,32 @@
 use std::ops::Range;
 use futures::future::join_all;
-use log::info;
+use log::{info, Level, LevelFilter};
 use ractor::Actor;
 use Acdis::db_actor::actor::DBActor;
 use Acdis::tcp_listener_actor::tcp_listener::chunk_ranges;
 use ractor_cluster;
 use ractor_cluster::node::NodeConnectionMode;
+use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 
+fn setup_logging() {
+    let logconfig = ConfigBuilder::new()
+        .set_level_color(Level::Error, Some(Color::Red))
+        .set_level_color(Level::Warn, Some(Color::Yellow))
+        .set_level_color(Level::Info, Some(Color::Green))
+        .set_level_color(Level::Debug, Some(Color::Blue))
+        .set_target_level(LevelFilter::Debug)
+        .build();
+
+    CombinedLogger::init(
+        vec![
+            TermLogger::new(LevelFilter::Debug,  logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
+        ]
+    ).unwrap();
+}
 #[tokio::main]
 async fn main() {
+    setup_logging();
+    
     let pmd = ractor_cluster::NodeServer::new(
         0,
         std::env::var("CLUSTER_COOKIE").unwrap_or("cookie".to_string()),

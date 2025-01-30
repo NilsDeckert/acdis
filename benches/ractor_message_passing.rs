@@ -1,8 +1,11 @@
 use ractor::{async_trait, call, Actor, ActorProcessingErr, RpcReplyPort, ActorRef};
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
+use ractor_cluster::RactorMessage;
 
 struct BenchActor;
+
+#[derive(RactorMessage)]
 enum BenchMessage {
     Foo(RpcReplyPort<String>)
 }

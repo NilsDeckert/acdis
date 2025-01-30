@@ -24,7 +24,16 @@ pub enum DBMessage {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    
+    use ractor::{Actor, call, Message};
+    use serde::Serializer;
+    use crate::db_actor::actor::DBActor;
+
+    #[derive(RactorClusterMessage)]
+    pub enum TestMessageType {
+        #[rpc]
+        RpcU64(RpcReplyPort<u64>),
+    }
+
     #[test]
     fn serialize_hello() {
         let hello = Request::HELLO {
@@ -59,6 +68,19 @@ pub mod tests {
         
         assert_eq!(deserialized.reply_to, String::from("Client"));
     }
+
+    #[tokio::test]
+    async fn serialize_query_keyspace() {
+        let (actor, handle) = Actor::spawn(None, DBActor, 0u64..1u64)
+           .await.expect("Could not create actor");
+        
+        let response = call!(actor, DBMessage::QueryKeyspace);
+        if let Ok(response) = response {
+            assert!(!response.is_empty());
+            assert_eq!(response[0], 0u64);
+            assert_eq!(response[1], 1u64);
+        }
+    }
     
     #[test]
     fn serialize_dbmessage_hello() {
@@ -74,6 +96,6 @@ pub mod tests {
         };
         
         let db_message = DBMessage::Request(db_request);
-        let _serialized = db_message.into_bytes();
+        let _serialized = db_message.serialize();
     }
 }

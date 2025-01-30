@@ -77,6 +77,7 @@ impl Actor for DBActor {
             }
             DBMessage::Request(req) => {
                 debug!("Received request");
+                debug!("{:?}", req.request);
                 let reply = self.handle_request(req.request, map);
                 
                 match reply {
@@ -85,6 +86,7 @@ impl Actor for DBActor {
                         assert_eq!(reply_to_vec.len(), 1,
                                    "Found less than or more than one actors for {}", req.reply_to);
                         let reply_to = reply_to_vec.into_iter().next().unwrap();
+                        debug!("Replying to: {:?}", reply_to);
                         
                         Ok(reply_to.send_message(SerializableFrame(frame))?)
                     },
@@ -144,3 +146,11 @@ impl DBActor {
         }
     }
 }
+
+// #[cfg(test)]
+// mod test {
+//     use super::*;
+//     
+//     #[test]
+//     fn 
+// }

@@ -46,6 +46,7 @@ impl Actor for ParseRequestActor {
 
             Ok(request) => {
                 let responsible = self.find_responsible(&request).await?;
+                debug!("Request: {:?}", request);
 
                 cast!(
                     responsible,
@@ -116,7 +117,7 @@ impl ParseRequestActor {
         }
         
         if let Some(member) = ractor::pg::get_members(&group_name).first() {
-            debug!("Responsible actor: {}", member.get_id());
+            debug!("Responsible actor: {}", member.get_id().pid());
             Ok(ActorRef::<DBMessage>::from(member.clone()))
         } else {
             error!("Couldn't find responsible actor");

@@ -1,8 +1,7 @@
 use log::{debug, error, info, warn};
-use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef, Message};
+use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use ractor_cluster::RactorMessage;
 use redis_protocol::resp3::decode;
-use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::util::convert::SerializableFrame;
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::OwnedReadHalf;
@@ -46,7 +45,7 @@ impl Actor for TcpReaderActor {
     // TODO: Because of this loop{}, we only query the mailbox once, thus cannot handle supervisor messages
     async fn handle(&self, myself: ActorRef<Self::Msg>, _message: Self::Msg, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         debug!("Begin reading from tcp stream...");
-        let (stream, writer) = state;
+        let (stream, _writer) = state;
 
         let (parse_ref, _parse_handle) = Actor::spawn(
             None, ParseRequestActor, ()

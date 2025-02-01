@@ -3,7 +3,7 @@ use std::ops::Range;
 use std::process::exit;
 use futures::future::join_all;
 use log::{debug, error, info};
-use ractor::{cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent, async_trait, Message};
+use ractor::{cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent, async_trait};
 use ractor::SupervisionEvent::*;
 use ractor_cluster::RactorMessage;
 use tokio::net::TcpListener;
@@ -52,9 +52,9 @@ impl Actor for TcpListenerActor {
 
         /* Number of chunk to split key space into */
         let chunks = 2_u64.pow(3);
-        //let mut handles = Vec::new();
+        let mut handles = Vec::new();
 
-/*        info!("Spawning initial DB actors");
+        info!("Spawning initial DB actors");
         for range in chunk_ranges(chunks) {
             handles.push(tokio::spawn({
                 Actor::spawn_linked(
@@ -66,7 +66,6 @@ impl Actor for TcpListenerActor {
             }));
         }
         join_all(handles).await;
-*/       
         
         
         /* Open TCP port to accept connections */

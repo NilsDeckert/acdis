@@ -2,6 +2,7 @@ extern crate core;
 
 use ractor::{cast, Actor};
 
+#[allow(unused_imports)]
 use log::{debug, info, Level, LevelFilter};
 use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
 use ractor_cluster::{NodeEventSubscription, NodeServer};
@@ -32,10 +33,10 @@ fn setup_logging() {
     ).unwrap();
 }
 
-struct subscription;
+struct Subscription;
 
-impl NodeEventSubscription for subscription {
-    fn node_session_opened(&self, ses: NodeServerSessionInformation) {
+impl NodeEventSubscription for Subscription {
+    fn node_session_opened(&self, _ses: NodeServerSessionInformation) {
         // info!("Session opened: \n\
         //     node_id:    {:#?} \n\
         //     peer_addr:  {:#?} \n\
@@ -51,11 +52,11 @@ impl NodeEventSubscription for subscription {
         // info!("\n\n\n\n\n\n")
     }
 
-    fn node_session_disconnected(&self, ses: NodeServerSessionInformation) {
+    fn node_session_disconnected(&self, _ses: NodeServerSessionInformation) {
         // info!("Session disconnected: {:#?}", ses.node_id);
     }
 
-    fn node_session_authenicated(&self, ses: NodeServerSessionInformation) {
+    fn node_session_authenicated(&self, _ses: NodeServerSessionInformation) {
         // info!("Session authenticated: {:#?}", ses.node_id);
     }
 
@@ -79,7 +80,6 @@ impl NodeEventSubscription for subscription {
 #[tokio::main]
 async fn main() {
     setup_logging();
-    debug!("HALLO");
 
     let server = NodeServer::new(
         std::env::var("CLUSTER_PORT").unwrap_or(String::from("6381")).parse().unwrap(),
@@ -97,9 +97,9 @@ async fn main() {
     ).await.expect("Failed to spawn port mapper daemon");
 
     cast!(pmd_ref, SubscribeToEvents{
-        id: String::from("subscription"),
-        subscription: Box::new(subscription)}
-    ).expect("Failed to send subscription msg");
+        id: String::from("Subscription"),
+        subscription: Box::new(Subscription)}
+    ).expect("Failed to send Subscription msg");
 
     let (_tcp_actor, tcp_handler) = Actor::spawn(
         Some(String::from("TcpListenerActor")),

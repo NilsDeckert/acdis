@@ -3,7 +3,7 @@ use std::ops::Range;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol::error::RedisProtocolError;
 use log::{debug, info, warn};
-use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{command, hello, info, ping, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
@@ -64,7 +64,7 @@ impl Actor for DBActor {
             DBMessage::QueryKeyspace(reply) => {
                 debug!("Received keyspace query");
                 if !reply.is_closed() {
-                    reply.send(vec!(map.range.start, map.range.end))?;
+                    reply.send(map.range.clone())?;
                 }
                 Ok(())
             }

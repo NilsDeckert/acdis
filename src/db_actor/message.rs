@@ -1,10 +1,8 @@
 use std::ops::Range;
 use redis_protocol_bridge::commands::parse::Request;
-use ractor::{ActorRef, BytesConvertable, RpcReplyPort};
+use ractor::RpcReplyPort;
 use ractor_cluster::RactorClusterMessage;
-use redis_protocol_bridge::util::convert::SerializableFrame;
 
-//#[derive(RactorClusterMessage)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct DBRequest {
     pub request: Request,
@@ -15,7 +13,7 @@ pub struct DBRequest {
 pub enum DBMessage {
     #[allow(dead_code)]
     #[rpc]
-    QueryKeyspace(RpcReplyPort<Vec<u64>>),
+    QueryKeyspace(RpcReplyPort<Range<u64>>),
     #[rpc]
     Responsible(u64, RpcReplyPort<bool>),
     Request(DBRequest)
@@ -24,8 +22,7 @@ pub enum DBMessage {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use ractor::{Actor, call, Message};
-    use serde::Serializer;
+    use ractor::{Actor, call, Message, BytesConvertable};
     use crate::db_actor::actor::DBActor;
 
     #[derive(RactorClusterMessage)]
@@ -77,8 +74,8 @@ pub mod tests {
         let response = call!(actor, DBMessage::QueryKeyspace);
         if let Ok(response) = response {
             assert!(!response.is_empty());
-            assert_eq!(response[0], 0u64);
-            assert_eq!(response[1], 1u64);
+            assert_eq!(response.start, 0u64);
+            assert_eq!(response.end,   1u64);
         }
     }
     

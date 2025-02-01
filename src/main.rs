@@ -1,14 +1,11 @@
 extern crate core;
 
-use ractor::{cast, Actor};
+use ractor::Actor;
 
 #[allow(unused_imports)]
 use log::{debug, info, Level, LevelFilter};
-use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
-use ractor_cluster::{NodeEventSubscription, NodeServer};
-use ractor_cluster::NodeServerMessage::SubscribeToEvents;
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
-
+use acdis::node_manager_actor::actor::{NodeManagerActor, NodeType};
 use crate::tcp_listener_actor::tcp_listener::TcpListenerActor;
 
 mod db_actor;
@@ -16,6 +13,7 @@ mod parse_actor;
 mod tcp_listener_actor;
 mod tcp_reader_actor;
 mod tcp_writer_actor;
+mod node_manager_actor;
 
 fn setup_logging() {
     let logconfig = ConfigBuilder::new()
@@ -33,73 +31,13 @@ fn setup_logging() {
     ).unwrap();
 }
 
-struct Subscription;
-
-impl NodeEventSubscription for Subscription {
-    fn node_session_opened(&self, _ses: NodeServerSessionInformation) {
-        // info!("Session opened: \n\
-        //     node_id:    {:#?} \n\
-        //     peer_addr:  {:#?} \n\
-        //     peer_name:  {:#?} \n\
-        //     is_server:  {:#?}",
-        //     ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
-        // 
-        // let registered = ractor::registry::registered();
-        // info!("Registered: {:#?}", registered);
-        // 
-        // let pids = ractor::registry::get_all_pids();
-        // info!("Pids: {:#?}", pids);
-        // info!("\n\n\n\n\n\n")
-    }
-
-    fn node_session_disconnected(&self, _ses: NodeServerSessionInformation) {
-        // info!("Session disconnected: {:#?}", ses.node_id);
-    }
-
-    fn node_session_authenicated(&self, _ses: NodeServerSessionInformation) {
-        // info!("Session authenticated: {:#?}", ses.node_id);
-    }
-
-    fn node_session_ready(&self, ses: NodeServerSessionInformation) {
-        info!("Session ready: {:?}", ses.peer_name);
-        // info!("Session ready: \n\
-        //     node_id:    {:#?} \n\
-        //     peer_addr:  {:#?} \n\
-        //     peer_name:  {:#?} \n\
-        //     is_server:  {:#?}",
-        //     ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
-        // 
-        // let registered = ractor::registry::registered();
-        // info!("Registered: {:#?}", registered);
-        // 
-        // let pids = ractor::registry::get_all_pids();
-        // info!("Pids: {:#?}", pids);
-    }
-}
 
 #[tokio::main]
 async fn main() {
     setup_logging();
 
-    let server = NodeServer::new(
-        std::env::var("CLUSTER_PORT").unwrap_or(String::from("6381")).parse().unwrap(),
-        std::env::var("CLUSTER_COOKIE").unwrap_or(String::from("cookie")),
-        String::from("host_node"),
-        gethostname::gethostname().into_string().unwrap(),
-        None,
-        Some(NodeConnectionMode::Transitive)
-    );
-
-    let (pmd_ref, _pmd_handler) = Actor::spawn(
-        None,
-        server,
-        ()
-    ).await.expect("Failed to spawn port mapper daemon");
-
-    cast!(pmd_ref, SubscribeToEvents{
-        id: String::from("Subscription"),
-        subscription: Box::new(Subscription)}
-    ).expect("Failed to send Subscription msg");
+    let (_manager_ref, _manager_handler) = Actor::spawn(None, NodeManagerActor, NodeType::Server)
+                                            .await.expect("Failed to spawn node manager");
 
     let (_tcp_actor, tcp_handler) = Actor::spawn(
         Some(String::from("TcpListenerActor")),

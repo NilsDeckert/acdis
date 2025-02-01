@@ -1,13 +1,10 @@
 use std::io::ErrorKind::AddrInUse;
-use std::ops::Range;
 use std::process::exit;
-use futures::future::join_all;
 use log::{debug, error, info};
 use ractor::{cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent, async_trait};
 use ractor::SupervisionEvent::*;
 use ractor_cluster::RactorMessage;
 use tokio::net::TcpListener;
-use crate::db_actor::actor::DBActor;
 use crate::tcp_reader_actor::tcp_reader::TcpReaderActor;
 use crate::tcp_writer_actor::tcp_writer::TcpWriterActor;
 
@@ -49,24 +46,6 @@ impl Actor for TcpListenerActor {
     type Arguments = String;
 
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, address: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
-
-        /* Number of chunk to split key space into */
-        let chunks = 2_u64.pow(3);
-        let mut handles = Vec::new();
-
-        info!("Spawning initial DB actors");
-        for range in chunk_ranges(chunks) {
-            handles.push(tokio::spawn({
-                Actor::spawn_linked(
-                    Some(format!("DBActor {:#018x}..{:#018x}", range.start, range.end)),
-                    DBActor,
-                    range,
-                    myself.get_cell()
-                )
-            }));
-        }
-        join_all(handles).await;
-        
         
         /* Open TCP port to accept connections */
         info!("Listening on {}", address);
@@ -146,26 +125,3 @@ impl Actor for TcpListenerActor {
     }
 }
 
-/// Divide the value range 0..[`u64::MAX`] into equally sized parts.
-///
-/// # Arguments 
-///
-/// * `chunks`: Number of chunks to return. MUST be power of two.
-///
-/// returns: Vec<(u64, u64), Global> 
-pub fn chunk_ranges(chunks: u64) -> Vec<Range<u64>> {
-
-    assert!(chunks.is_power_of_two());
-
-    let values_per_chunk = u64::MAX / chunks;
-    let mut ranges: Vec<Range<u64>> = Vec::new();
-
-    (0..chunks).for_each(|i| {
-        let start = i * values_per_chunk;
-        let end = if i == chunks - 1 { u64::MAX } else { start + values_per_chunk - 1 };
-
-        ranges.push(start .. end);
-    });
-
-    ranges
-}

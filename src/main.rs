@@ -5,7 +5,7 @@ use ractor::Actor;
 #[allow(unused_imports)]
 use log::{debug, info, Level, LevelFilter};
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
-use acdis::node_manager_actor::actor::{NodeManagerActor, NodeType};
+use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
 use crate::tcp_listener_actor::tcp_listener::TcpListenerActor;
 
 mod db_actor;

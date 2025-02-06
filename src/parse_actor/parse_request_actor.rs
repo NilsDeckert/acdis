@@ -1,6 +1,7 @@
+use std::any::Any;
 use std::hash::Hasher;
-use log::{debug, error};
-use ractor::{async_trait, call, cast, Actor, ActorProcessingErr, ActorRef};
+use log::{debug, error, warn};
+use ractor::{async_trait, call, cast, pg, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::util::convert::SerializableFrame;
@@ -45,13 +46,45 @@ impl Actor for ParseRequestActor {
             }
 
             Ok(request) => {
-                let responsible = self.find_responsible(&request).await?;
-                debug!("Request: {:?}", request);
-
+                // let responsible = self.find_responsible(&request).await?;
+                // debug!("Request: {:?}", request);
+                
+                let groups = pg::which_groups();
+                for g in groups {
+                    debug!("Got group {}", g);
+                }
+                let scopes = pg::which_scopes();
+                for s in scopes {
+                    debug!("Got scopes {}", s);
+                }
+                
+                let group_name = String::from("acdis");
+                let members = pg::get_members(&group_name);
+                for m in members {
+                    let actor_ref = ActorRef::<DBMessage>::from(m);
+                    let r = call!(actor_ref, DBMessage::QueryKeyspace);
+                    match r {
+                        Err(err) => {
+                            error!("Couldnt query keyspace: {}", err.to_string());
+                        }
+                        Ok(keyspace) => {
+                            debug!("Got keyspace {:#?}", keyspace);
+                        }
+                    }
+                    
+                }
+                
+                let r = Request::GET{
+                    key: String::from("my_key")
+                };
+                
+                let responsible = self.find_responsible(&r).await?;
+                debug!("Request: {:?}", r);
+                
                 cast!(
                     responsible,
                     DBMessage::Request(
-                        DBRequest{request, reply_to: message.reply_to}
+                        DBRequest{request: r, reply_to: message.reply_to}
                     )
                 )?;
                 Ok(())
@@ -96,19 +129,32 @@ impl ParseRequestActor {
     /// ```
     async fn find_responsible(&self, request: &Request) -> Result<ActorRef<DBMessage>, ActorProcessingErr> {
         let group_name = "acdis".to_string();
-        let members = ractor::pg::get_members(&group_name);
+        //let members = ractor::pg::get_members(&group_name);
+        let members = ractor::pg::get_local_members(&group_name);
         
         match request {
-            Request::GET { key} |
+            Request::GET { key } |
             Request::SET { key, .. } => {
                 let hash = self.hash(key);
                 for member in members {
                     let actor_ref = ActorRef::<DBMessage>::from(member);
-                    if let Ok(responsible) = call!(actor_ref, DBMessage::Responsible, hash) {
-                        if responsible {
-                            debug!("{} responsible for hash {:#x}",
+                    debug!("Is message type of DBMessage? {}", actor_ref.is_message_type_of::<DBMessage>().unwrap());
+                    debug!("Is message type of ParseRequest? {}",   actor_ref.is_message_type_of::<ParseRequestMessage>().unwrap());
+                    debug!("Is message type of NodeManager? {}",    actor_ref.is_message_type_of::<crate::node_manager_actor::message::NodeManagerMessage>().unwrap());
+                    debug!("Is message type of DBRequest? {}",      actor_ref.is_message_type_of::<DBRequest>().unwrap());
+                    debug!("{:?}", actor_ref.get_id());
+                    debug!("Attempting to call actor");
+                    match call!(actor_ref, DBMessage::Responsible, hash) {
+                        Ok(responsible) => {
+                            if responsible {
+                                debug!("{} responsible for hash {:#x}",
                                 actor_ref.get_name().unwrap_or("Actor".into()), hash);
-                            return Ok(actor_ref);
+                                return Ok(actor_ref);
+                            }
+                        }
+                        Err(e) => {
+                            warn!("Error calling db_actor: {}", e);
+                            break;
                         }
                     }
                 }

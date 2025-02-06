@@ -19,7 +19,7 @@ impl Actor for TcpWriterActor {
 
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, write_half: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
         // Join process group to facilitate cross-node addressing
-        info!("Joining pg {}", write_half.peer_addr().unwrap().to_string());
+        debug!("Joining pg {}", write_half.peer_addr().unwrap().to_string());
         ractor::pg::join(
             write_half.peer_addr().unwrap().to_string(),
             vec![myself.get_cell()]

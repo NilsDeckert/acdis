@@ -30,42 +30,12 @@ fn setup_logging() {
     ).unwrap();
 }
 
-fn sort_actors_by_keyspace(actors: &mut Vec<ActorCell>) {
-    actors.sort_by(|actor_a, actor_b| {
-        let ref_actor_a = ActorRef::<DBMessage>::from(actor_a.clone());
-        let ref_actor_b = ActorRef::<DBMessage>::from(actor_b.clone());
-
-        futures::executor::block_on(async {
-            let keyspace_a: Range<u64> = call!(ref_actor_a, DBMessage::QueryKeyspace).unwrap();
-            let keyspace_b: Range<u64> = call!(ref_actor_b, DBMessage::QueryKeyspace).unwrap();
-
-            return if (keyspace_a.end - keyspace_a.start) > (keyspace_b.end - keyspace_b.start) {
-                Ordering::Greater
-            } else if (keyspace_a.end - keyspace_a.start) < (keyspace_b.end - keyspace_b.start) {
-                Ordering::Less
-            } else {
-                Ordering::Equal
-            }
-        })
-    });
-}
 #[tokio::main]
 async fn main() {
     setup_logging();
 
     let (_manager_ref, _manager_handler) = Actor::spawn(None, NodeManagerActor, NodeType::Client)
                                             .await.expect("Failed to spawn node manager");
-    
-    let mut members = pg::get_members(&String::from("acdis"));
-    sort_actors_by_keyspace(&mut members);
-
-    info!("Found {} db actors", members.len());
-
-    for member in members {
-        let actor_ref = ActorRef::<DBMessage>::from(member);
-        let keyspace = call!(actor_ref, DBMessage::QueryKeyspace).expect("Failed querying keyspace");
-        info!("{} has keyspace {:?}", actor_ref.get_name().unwrap_or(String::from("Actor")), keyspace);
-    }
     
     tokio::signal::ctrl_c().await.expect("Failed waiting for ctrl c");
 }

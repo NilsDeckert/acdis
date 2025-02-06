@@ -1,7 +1,9 @@
+use std::collections::HashMap;
 use std::ops::Range;
 use redis_protocol_bridge::commands::parse::Request;
 use ractor::RpcReplyPort;
 use ractor_cluster::RactorClusterMessage;
+use crate::db_actor::map_entry::MapEntry;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct DBRequest {
@@ -16,6 +18,8 @@ pub enum DBMessage {
     QueryKeyspace(RpcReplyPort<Range<u64>>),
     #[rpc]
     Responsible(u64, RpcReplyPort<bool>),
+    #[rpc]
+    Drain(RpcReplyPort<HashMap<String, MapEntry>>),
     Request(DBRequest)
 }
 
@@ -23,7 +27,7 @@ pub enum DBMessage {
 pub mod tests {
     use super::*;
     use ractor::{Actor, call, Message, BytesConvertable};
-    use crate::db_actor::actor::DBActor;
+    use crate::db_actor::actor::{DBActor, DBActorArgs};
 
     #[derive(RactorClusterMessage)]
     pub enum TestMessageType {
@@ -68,7 +72,7 @@ pub mod tests {
 
     #[tokio::test]
     async fn serialize_query_keyspace() {
-        let (actor, handle) = Actor::spawn(None, DBActor, 0u64..1u64)
+        let (actor, handle) = Actor::spawn(None, DBActor, DBActorArgs{map: None, range: 0u64..1u64})
            .await.expect("Could not create actor");
         
         let response = call!(actor, DBMessage::QueryKeyspace);

@@ -1,7 +1,9 @@
 use std::fmt::{Display, Formatter};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::util::convert::AsFrame;
+use serde::{Deserialize, Serialize};
 
+#[derive(Serialize, Deserialize)]
 pub enum MapEntry {
     STRING(String),
     USIZE(usize),

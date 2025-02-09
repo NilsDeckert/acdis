@@ -127,15 +127,6 @@ impl Actor for NodeManagerActor {
                 
                 // Join later to avoid sending messages to ourselves
                 pg::join(pg_name.clone(), vec![myself.get_cell()]);
-                
-                // TODO: Remove
-                let pg_name2 = String::from("acdis");
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-                debug!("Summary: DB Actors in pg:");
-                for a in pg::get_members(&pg_name2) {
-                    debug!("- {}", a.get_name().unwrap_or(String::from("Unnamed Actor")));
-                    debug!("  - Type DBMessage? {:?}", a.is_message_type_of::<DBMessage>().unwrap());
-                }
             },
             QueryKeyspace(reply) => {
                 reply.send(own.keyspace.clone())?;
@@ -302,8 +293,6 @@ impl NodeManagerActor {
                     DBActorArgs{map: Some(map), range: range.clone()},
                     supervisor.get_cell()
                 ).await.expect("Failed to spawn DBActor");
-                
-                info!("Is newly spawned db_actor of type DBMessage? {:?}", actor_ref.is_message_type_of::<DBMessage>());
 
                 ret_map.insert(range, actor_ref);
             }

@@ -61,16 +61,11 @@ impl Actor for DBActor {
 
         let members = ractor::pg::get_members(&group_name);
         info!("We're one of {} actors in this cluster", members.len());
-        for member in members {
-            debug!("Is db_actor type DBMessage? {:?}", member.is_message_type_of::<DBMessage>().unwrap());
-            break;
-        }
 
         Ok(map)
     }
 
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, map: &mut Self::State) -> Result<(), ActorProcessingErr> {
-        debug!("Handling message");
         
         match message {
             DBMessage::QueryKeyspace(reply) => {

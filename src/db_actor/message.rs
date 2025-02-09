@@ -5,6 +5,7 @@ use ractor::RpcReplyPort;
 use ractor_cluster::RactorClusterMessage;
 use crate::db_actor::map_entry::MapEntry;
 
+// #[derive(serde::Serialize, serde::Deserialize, RactorClusterMessage)]
 #[derive(serde::Serialize, serde::Deserialize)]
 pub struct DBRequest {
     pub request: Request,

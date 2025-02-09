@@ -1,4 +1,3 @@
-use std::any::Any;
 use std::hash::Hasher;
 use log::{debug, error, warn};
 use ractor::{async_trait, call, cast, pg, Actor, ActorProcessingErr, ActorRef};
@@ -120,7 +119,7 @@ impl ParseRequestActor {
             _ => {}
         }
         
-        if let Some(member) = ractor::pg::get_members(&group_name).first() {
+        if let Some(member) = pg::get_members(&group_name).first() {
             debug!("Responsible actor: {}", member.get_id().pid());
             Ok(ActorRef::<DBMessage>::from(member.clone()))
         } else {

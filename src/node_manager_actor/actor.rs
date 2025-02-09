@@ -2,8 +2,7 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Range;
 use async_trait::async_trait;
-use futures::future::join_all;
-use log::{debug, info, warn};
+use log::{info, warn};
 use ractor::{call, cast, pg, Actor, ActorCell, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor::SupervisionEvent::*;
 use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
@@ -84,7 +83,7 @@ impl Actor for NodeManagerActor {
         
     }
 
-    async fn post_start(&self, myself: ActorRef<Self::Msg>, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn post_start(&self, _myself: ActorRef<Self::Msg>, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         Ok(())
     }
 
@@ -154,8 +153,6 @@ impl Actor for NodeManagerActor {
                     range: keyspace.clone()
                 };
                 
-                info!("I manage {} db_actors", own.db_actors.len());
-                
                 // Assumption: keyspace >= actor_keyspace
                 for (actor_keyspace, actor) in &own.db_actors {
                     
@@ -163,7 +160,8 @@ impl Actor for NodeManagerActor {
                     // the requested keyspace
                     if actor_keyspace.start >= keyspace.start 
                         && actor_keyspace.end <= keyspace.end {
-                        // Kill actor and fetch HashMap
+                        // ""Kill"" actor and fetch HashMap
+                        // TODO: Currently the actor is not stopped
                         info!("'Killing' actor {:?} for keyspace {:#?}", actor, actor_keyspace);
                         let actor_hashmap = call!(actor, DBMessage::Drain);
                         return_map.map.extend(actor_hashmap.unwrap());
@@ -339,6 +337,7 @@ impl NodeManagerActor {
     }
     
 }
+#[allow(dead_code)]
 struct Subscription(ActorRef<NodeManagerMessage>);
 
 impl NodeEventSubscription for Subscription {

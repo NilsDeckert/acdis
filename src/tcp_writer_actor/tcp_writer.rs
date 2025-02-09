@@ -1,4 +1,4 @@
-use log::{debug, info};
+use log::{debug};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::encode;
 use redis_protocol::resp3::types::{OwnedFrame, Resp3Frame};

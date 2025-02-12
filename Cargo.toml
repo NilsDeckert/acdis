@@ -25,6 +25,7 @@ rand = "0.8.5"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
+async-channel = { version = "2.3.1" }
 
 [profile.release]
 codegen-units = 1
@@ -44,4 +45,8 @@ harness = false
 
 [[bench]]
 name = "messages"
+harness = false
+
+[[bench]]
+name = "test"
 harness = false

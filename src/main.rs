@@ -26,7 +26,7 @@ fn setup_logging() {
 
     CombinedLogger::init(
         vec![
-            TermLogger::new(LevelFilter::Debug,  logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
+            TermLogger::new(LevelFilter::Info,  logconfig.clone(), TerminalMode::Mixed, ColorChoice::Auto),
         ]
     ).unwrap();
 }

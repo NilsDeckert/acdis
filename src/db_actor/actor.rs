@@ -51,7 +51,7 @@ impl Actor for DBActor {
     /// Join group of actors
     async fn pre_start(&self, myself: ActorRef<Self::Msg>, args: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
         let map = args.map.unwrap_or(
-            PartitionedHashMap { map: HashMap::default(), range: args.range});
+            PartitionedHashMap { map: HashMap::default(), range: args.range.clone()});
         let group_name = "acdis".to_string();
 
         ractor::pg::join(
@@ -60,7 +60,8 @@ impl Actor for DBActor {
         );
 
         let members = ractor::pg::get_members(&group_name);
-        info!("We're one of {} actors in this cluster", members.len());
+        info!("We're one of {} actors in this cluster managing {:#018x}..{:#018x}",
+            members.len(), args.range.start, args.range.end);
 
         Ok(map)
     }

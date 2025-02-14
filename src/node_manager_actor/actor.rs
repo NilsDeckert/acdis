@@ -139,9 +139,9 @@ impl Actor for NodeManagerActor {
                 }
             },
             AdoptKeyspace(keyspace, reply) => {
-                info!("{} Giving away keyspace {:#?}", 
+                info!("{} Giving away keyspace {:#018x}..{:#018x}", 
                     myself.get_name().unwrap_or(String::from("node_manager")),
-                    keyspace);
+                    keyspace.start, keyspace.end);
                 
                 assert_ne!(keyspace, own.keyspace); // Don't give up whole keyspace.
                 // Keyspace must be at one end of our keyspace
@@ -165,6 +165,10 @@ impl Actor for NodeManagerActor {
                         info!("'Killing' actor {:?} for keyspace {:#?}", actor, actor_keyspace);
                         let actor_hashmap = call!(actor, DBMessage::Drain);
                         return_map.map.extend(actor_hashmap.unwrap());
+                    } else if actor_keyspace.end <= keyspace.start 
+                        || actor_keyspace.start >= keyspace.end {
+                        // Actor does not overlap with requested keyspace
+                        // Ignore
                     } else {
                         warn!("Did not cover this case:\n\
                         The keyspace of this actor ({:#018x}..{:#018x}) is not fully inside the \
@@ -221,6 +225,10 @@ impl NodeManagerActor {
     }
 
     /// Divide a given [`Range`] into equally sized parts.
+    /// 
+    /// # **Warning** 
+    /// We want to use the entire keyspace from 0x00 to u64MAX.
+    /// However, we cannot really express this, since we can't return U64MAX+1. TODO.
     ///
     /// # Arguments 
     /// * `range`: Keyspace to split
@@ -228,7 +236,7 @@ impl NodeManagerActor {
     ///
     /// returns: Vec<(u64, u64), Global> 
     fn chunk_ranges(range: Range<u64>, chunks: u64) -> Vec<Range<u64>> {
-        let size = range.end - range.start;
+        let size = (range.end) - range.start;
 
         let values_per_chunk = size / chunks;
         let mut ranges: Vec<Range<u64>> = Vec::new();
@@ -237,8 +245,12 @@ impl NodeManagerActor {
         
         for i in 0..chunks {
             let mut end = start + values_per_chunk;
+            // If this is the last chunk, make this contain the extra elements
             if i == chunks - 1 {
-                end += size%chunks;
+                //end += size%chunks;
+            } else {
+                // If this is not the last chunk, increase this by one as it is exclusive
+                end += 1
             }
             ranges.push(start..end);
             start = end;
@@ -260,7 +272,7 @@ impl NodeManagerActor {
     /// Returns a HashMap that maps a Range (Keyspace) to a responsible actor
     async fn spawn_db_actors(args: DBActorArgs, actors_to_join: u64, supervisor: ActorRef<NodeManagerMessage>) -> HashMap<Range<u64>, ActorRef<DBMessage>> {
         let mut ret_map: HashMap<Range<u64>, ActorRef<DBMessage>> = HashMap::new();
-        info!("Spawning {} DB actors for range {:#?}", actors_to_join, args.range);
+        info!("Spawning {} DB actors for range {:#018x}..{:#018x}", actors_to_join, args.range.start, args.range.end);
         
         let mut initial_maps = vec!();
         let ranges = NodeManagerActor::chunk_ranges(args.range.clone(), actors_to_join);
@@ -311,9 +323,13 @@ impl NodeManagerActor {
     }
     
     /// Given a range, split it and return both halves
+    /// Of size of range is odd, first half will contain the extra element
     fn halve_range(range: Range<u64>) -> (Range<u64>, Range<u64>) {
-        let mid = range.start + ((range.end - range.start) / 2);
-        (range.start .. mid, mid .. range.end)
+        let length = (range.end - 1) - range.start; // End of range is not inside range
+        let half_length = length.div_ceil(2);
+        let mid = range.start + half_length+1;
+        (range.start..mid,
+        mid..range.end)
     }
 
     fn sort_actors_by_keyspace(actors: &mut Vec<ActorCell>) {
@@ -379,5 +395,32 @@ impl NodeEventSubscription for Subscription {
         // 
         // let pids = ractor::registry::get_all_pids();
         // info!("Pids: {:#?}", pids);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_halve_range() {
+        assert_eq!(NodeManagerActor::halve_range(0..11), (0..6, 6..11));
+        assert_eq!(NodeManagerActor::halve_range(0..10), (0..6, 6..10));
+    }
+    
+    #[test]
+    fn test_chunk_range_halve() {
+        let chunked_ranges = NodeManagerActor::chunk_ranges(0..11, 2);
+        let halved_ranges = NodeManagerActor::halve_range(0..11);
+        assert_eq!(chunked_ranges[0], halved_ranges.0);
+        assert_eq!(chunked_ranges[1], halved_ranges.1);
+    }
+    
+    #[test]
+    fn test_chunk_range() {
+        let chunked_ranges = NodeManagerActor::chunk_ranges(0x0..0xf, 16);
+        let expected = vec![
+            (0x0..0x2),
+            (0x1..0x2),
+        ];
     }
 }

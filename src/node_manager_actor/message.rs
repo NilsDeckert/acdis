@@ -11,4 +11,6 @@ pub enum NodeManagerMessage {
     #[rpc]
     AdoptKeyspace(Range<u64>, RpcReplyPort<PartitionedHashMap>),
     SetKeyspace(Range<u64>),
+    #[rpc]
+    QueryNodes(RpcReplyPort<Vec<String>>)
 }

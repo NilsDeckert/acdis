@@ -2,12 +2,12 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Range;
 use async_trait::async_trait;
-use log::{info, warn};
+use log::{error, info, warn};
 use ractor::{call, cast, pg, Actor, ActorCell, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor::SupervisionEvent::*;
 use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
-use ractor_cluster::{NodeEventSubscription, NodeServer};
-use ractor_cluster::NodeServerMessage::SubscribeToEvents;
+use ractor_cluster::{NodeEventSubscription, NodeServer, NodeServerMessage};
+use ractor_cluster::NodeServerMessage::{GetSessions, SubscribeToEvents};
 use rand::Rng;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
@@ -22,6 +22,7 @@ pub struct NodeManagerActor;
 pub struct NodeManageActorState {
     keyspace: Range<u64>,
     db_actors: HashMap<Range<u64>, ActorRef<DBMessage>>,
+    node_server: ActorRef<NodeServerMessage>,
 }
 
 #[allow(dead_code)]
@@ -60,7 +61,7 @@ impl Actor for NodeManagerActor {
         
         let pmd_ref = NodeManagerActor::spawn_pmd(port, name).await;
         NodeManagerActor::subscribe_to_events(myself.clone(), pmd_ref.clone()).await;
-        
+
         // If NodeType is Client, we assume there is already another NodeServer accepting connections
         if let NodeType::Client = args {
             ractor_cluster::client_connect(
@@ -74,11 +75,35 @@ impl Actor for NodeManagerActor {
         // Wait to establish connection
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
+        // TODO: Query other nodes in cluster
+        // let pg_name = String::from("acdis_node_managers");
+        // let nodes = pg::get_members(&pg_name);
+        // for node in nodes {
+        //     let actor_ref = ActorRef::<NodeManagerMessage>::from(node);
+        //     let sessions = call!(actor_ref, QueryNodes)?;
+        //     info!("Other node is connected to");
+        //     for session in sessions {
+        //         if let Err(e) = ractor_cluster::client_connect(
+        //             &pmd_ref,
+        //             session
+        //         ).await {
+        //             error!("Failed to connect to node server: {}", e);
+        //         }
+        //     }
+        //
+        // }
+
+        let sessions = call!(pmd_ref, NodeServerMessage::GetSessions)?;
+        for session in sessions.keys() {
+            info!("{}", session);
+        }
+
         myself.send_message(Init)?;
             
         Ok(NodeManageActorState {
             keyspace: 0u64..u64::MAX,
-            db_actors: HashMap::new()
+            db_actors: HashMap::new(),
+            node_server: pmd_ref,
         })
         
     }
@@ -139,7 +164,7 @@ impl Actor for NodeManagerActor {
                 }
             },
             AdoptKeyspace(keyspace, reply) => {
-                info!("{} Giving away keyspace {:#018x}..{:#018x}", 
+                info!("{} Giving away keyspace {:#018x}..{:#018x}",
                     myself.get_name().unwrap_or(String::from("node_manager")),
                     keyspace.start, keyspace.end);
                 
@@ -165,7 +190,7 @@ impl Actor for NodeManagerActor {
                         info!("'Killing' actor {:?} for keyspace {:#?}", actor, actor_keyspace);
                         let actor_hashmap = call!(actor, DBMessage::Drain);
                         return_map.map.extend(actor_hashmap.unwrap());
-                    } else if actor_keyspace.end <= keyspace.start 
+                    } else if actor_keyspace.end <= keyspace.start
                         || actor_keyspace.start >= keyspace.end {
                         // Actor does not overlap with requested keyspace
                         // Ignore
@@ -178,6 +203,17 @@ impl Actor for NodeManagerActor {
                 }
                 
                 reply.send(return_map)?;
+            }
+            QueryNodes(reply) => {
+                let sessions = call!(own.node_server, GetSessions)?;
+                let mut ret = vec![];
+                for session in sessions.values() {
+                    let addr = &session.peer_addr;
+                    info!("Connected to: {}", addr);
+                    ret.push(String::from(addr))
+                }
+
+                reply.send(ret)?;
             }
         }
         Ok(())
@@ -204,7 +240,8 @@ impl NodeManagerActor {
             port,
             std::env::var("CLUSTER_COOKIE").unwrap_or(String::from("cookie")),
             name,
-            gethostname::gethostname().into_string().unwrap(),
+            format!("Node{}", rand::random::<u8>()),
+            //gethostname::gethostname().into_string().unwrap(),
             None,
             Some(NodeConnectionMode::Transitive)
         );
@@ -225,8 +262,8 @@ impl NodeManagerActor {
     }
 
     /// Divide a given [`Range`] into equally sized parts.
-    /// 
-    /// # **Warning** 
+    ///
+    /// # **Warning**
     /// We want to use the entire keyspace from 0x00 to u64MAX.
     /// However, we cannot really express this, since we can't return U64MAX+1. TODO.
     ///
@@ -382,7 +419,7 @@ impl NodeEventSubscription for Subscription {
     }
 
     fn node_session_ready(&self, ses: NodeServerSessionInformation) {
-        info!("Session ready: {:?}", ses.peer_name);
+        info!("Session ready: {:?}@{}", ses.peer_name, ses.peer_addr);
         // info!("Session ready: \n\
         //     node_id:    {:#?} \n\
         //     peer_addr:  {:#?} \n\
@@ -406,7 +443,7 @@ mod tests {
         assert_eq!(NodeManagerActor::halve_range(0..11), (0..6, 6..11));
         assert_eq!(NodeManagerActor::halve_range(0..10), (0..6, 6..10));
     }
-    
+
     #[test]
     fn test_chunk_range_halve() {
         let chunked_ranges = NodeManagerActor::chunk_ranges(0..11, 2);
@@ -414,7 +451,7 @@ mod tests {
         assert_eq!(chunked_ranges[0], halved_ranges.0);
         assert_eq!(chunked_ranges[1], halved_ranges.1);
     }
-    
+
     #[test]
     fn test_chunk_range() {
         let chunked_ranges = NodeManagerActor::chunk_ranges(0x0..0xf, 16);

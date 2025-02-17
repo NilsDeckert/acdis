@@ -2,13 +2,15 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::ops::Range;
 use async_trait::async_trait;
-use log::{error, info, warn};
-use ractor::{call, cast, pg, Actor, ActorCell, ActorProcessingErr, ActorRef, SupervisionEvent};
+use futures::future::join_all;
+use log::{debug, error, info, warn};
+use ractor::{call, cast, pg, Actor, ActorCell, ActorId, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor::SupervisionEvent::*;
 use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
-use ractor_cluster::{NodeEventSubscription, NodeServer, NodeServerMessage};
+use ractor_cluster::{IncomingEncryptionMode, NodeEventSubscription, NodeServer, NodeServerMessage};
 use ractor_cluster::NodeServerMessage::{GetSessions, SubscribeToEvents};
 use rand::Rng;
+use tokio::task::JoinHandle;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::actor::DBActor;
@@ -45,6 +47,9 @@ impl Actor for NodeManagerActor {
         
         let port;
         let name;
+
+        let client_port = std::env::var("CLIENT_PORT")
+                                .unwrap_or(String::from("0")).parse().unwrap();
         
         // Set arguments that differ between server and client
         match args {
@@ -54,7 +59,7 @@ impl Actor for NodeManagerActor {
             },
             NodeType::Client => {
                 let mut rng = rand::thread_rng();
-                port = 0; // Let OS choose a port
+                port = client_port; // Let OS choose a port
                 name = myself.get_name().unwrap_or(format!("Node {}", rng.gen::<u8>()));
             }
         }
@@ -93,6 +98,7 @@ impl Actor for NodeManagerActor {
         //
         // }
 
+        // TODO: Remove
         let sessions = call!(pmd_ref, NodeServerMessage::GetSessions)?;
         for session in sessions.keys() {
             info!("{}", session);
@@ -115,22 +121,18 @@ impl Actor for NodeManagerActor {
     async fn handle(&self, myself: ActorRef<Self::Msg>, message: Self::Msg, own: &mut Self::State) -> Result<(), ActorProcessingErr> {
         match message {
             Init => {
+                debug!("Received init message");
                 let pg_name = String::from("acdis_node_managers");
 
-                // TODO: Transitive node connection doesn't seem to work,
-                //       we only find directly connected nodes here.
                 let mut nodes = pg::get_members(&pg_name);
-                Self::sort_actors_by_keyspace(&mut nodes);
-                
-                if !nodes.is_empty() {
+                info!("Found {} other nodes.", nodes.len());
+                let keyspaces = Self::sort_actors_by_keyspace(&mut nodes).await;
+                if let Some((actor_ref, keyspace)) = keyspaces.into_iter().next() {
                     info!("Other NodeManagers present, attempting to adopt keyspace");
-                    let node = nodes[0].clone(); // Node with the largest keyspace
-                    let actor_ref = ActorRef::<NodeManagerMessage>::from(node);
-                    
-                    let keyspace = call!(actor_ref.clone(), QueryKeyspace).unwrap();
                     let (_, r2) = Self::halve_range(keyspace);
                     
                     // Inherit keys&values in that keyspace
+                    // TODO: if inheriting fails, maybe try next node
                     let map = call!(actor_ref, AdoptKeyspace, r2).expect("Failed to adopt keyspace");
                     let keyspace = map.range.clone();
                     own.keyspace = keyspace.clone();
@@ -153,6 +155,7 @@ impl Actor for NodeManagerActor {
                 pg::join(pg_name.clone(), vec![myself.get_cell()]);
             },
             QueryKeyspace(reply) => {
+                debug!("Received QueryKeyspace");
                 reply.send(own.keyspace.clone())?;
             },
             SetKeyspace(range) => {
@@ -178,6 +181,8 @@ impl Actor for NodeManagerActor {
                     range: keyspace.clone()
                 };
                 
+                let mut to_remove = vec![];
+                
                 // Assumption: keyspace >= actor_keyspace
                 for (actor_keyspace, actor) in &own.db_actors {
                     
@@ -190,6 +195,8 @@ impl Actor for NodeManagerActor {
                         info!("'Killing' actor {:?} for keyspace {:#?}", actor, actor_keyspace);
                         let actor_hashmap = call!(actor, DBMessage::Drain);
                         return_map.map.extend(actor_hashmap.unwrap());
+                        
+                        to_remove.push(actor_keyspace.clone());
                     } else if actor_keyspace.end <= keyspace.start
                         || actor_keyspace.start >= keyspace.end {
                         // Actor does not overlap with requested keyspace
@@ -202,9 +209,15 @@ impl Actor for NodeManagerActor {
                     }
                 }
                 
+                // Forget actors whose keyspace we gave away
+                for ks in to_remove {
+                    own.db_actors.remove(&ks);
+                }
+                
                 reply.send(return_map)?;
             }
             QueryNodes(reply) => {
+                debug!("Received QueryNodes");
                 let sessions = call!(own.node_server, GetSessions)?;
                 let mut ret = vec![];
                 for session in sessions.values() {
@@ -240,9 +253,8 @@ impl NodeManagerActor {
             port,
             std::env::var("CLUSTER_COOKIE").unwrap_or(String::from("cookie")),
             name,
-            format!("Node{}", rand::random::<u8>()),
-            //gethostname::gethostname().into_string().unwrap(),
-            None,
+            String::from("localhost"), // TODO: This is the String used by other nodes connecting to us. Use IP so it works across the network
+            Some(IncomingEncryptionMode::Raw),
             Some(NodeConnectionMode::Transitive)
         );
 
@@ -369,26 +381,38 @@ impl NodeManagerActor {
         mid..range.end)
     }
 
-    fn sort_actors_by_keyspace(actors: &mut Vec<ActorCell>) {
-        actors.sort_by(|actor_a, actor_b| {
-            let ref_actor_a = ActorRef::<NodeManagerMessage>::from(actor_a.clone());
-            let ref_actor_b = ActorRef::<NodeManagerMessage>::from(actor_b.clone());
-
-            futures::executor::block_on(async {
-                let keyspace_a: Range<u64> = call!(ref_actor_a, QueryKeyspace).unwrap();
-                let keyspace_b: Range<u64> = call!(ref_actor_b, QueryKeyspace).unwrap();
-
-                return if (keyspace_a.end - keyspace_a.start) > (keyspace_b.end - keyspace_b.start) {
-                    Ordering::Greater
-                } else if (keyspace_a.end - keyspace_a.start) < (keyspace_b.end - keyspace_b.start) {
-                    Ordering::Less
-                } else {
-                    Ordering::Equal
-                }
+    async fn sort_actors_by_keyspace(actors: &mut Vec<ActorCell>) -> Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>{
+        let tasks: Vec<JoinHandle<(ActorRef<NodeManagerMessage>, Range<u64>)>> = actors.into_iter().map(|actor| {
+            let actor_ref = ActorRef::<NodeManagerMessage>::from(actor.clone());
+            tokio::spawn(async move {
+                let keyspace = actor_ref.call(QueryKeyspace, None).await;
+                (actor_ref, keyspace.unwrap().expect("Failed to query keyspace"))
             })
+        }).collect();
+
+        let mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> = join_all(tasks).await.into_iter().map(|result| {
+            let (id, range) = result.expect("Failed awaiting QueryKeyspace response");
+            (id, range)
+        }).collect();
+
+        keyspaces.sort_by_key(|(_id, keyspace)| keyspace.end - keyspace.start);
+        keyspaces
+    }
+
+    /*        actors.sort_by(|actor_a, actor_b| {
+            let keyspace_a: Range<u64> = keyspaces.get(actor_a.get_id());
+            let keyspace_b: Range<u64> = keyspaces.get(actor_b.get_id());
+
+            return if (keyspace_a.end - keyspace_a.start) > (keyspace_b.end - keyspace_b.start) {
+                Ordering::Greater
+            } else if (keyspace_a.end - keyspace_a.start) < (keyspace_b.end - keyspace_b.start) {
+                Ordering::Less
+            } else {
+                Ordering::Equal
+            }
         });
     }
-    
+*/
 }
 #[allow(dead_code)]
 struct Subscription(ActorRef<NodeManagerMessage>);

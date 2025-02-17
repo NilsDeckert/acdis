@@ -30,7 +30,7 @@ impl PartitionedHashMap {
         if self.range.contains(&hash) {
             true
         } else {
-            debug!("Hash({:#x}) not in range {:#?}", hash, self.range);
+            debug!("Hash({:#x}) not in range {:#018x}..{:#018x}", hash, self.range.start, self.range.end);
             false
         }
         
@@ -66,7 +66,7 @@ impl Actor for DBActor {
         Ok(map)
     }
 
-    async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, map: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn handle(&self, myself: ActorRef<Self::Msg>, message: Self::Msg, map: &mut Self::State) -> Result<(), ActorProcessingErr> {
         
         match message {
             DBMessage::QueryKeyspace(reply) => {
@@ -110,6 +110,7 @@ impl Actor for DBActor {
                     reply.send(map.map.clone())?;
                 }
                 // TODO: Don't accept DB Requests anymore
+                myself.stop(Some(String::from("Received Drain request")));
                 Ok(())
             }
         }

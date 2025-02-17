@@ -102,6 +102,7 @@ impl ParseRequestActor {
             Request::GET { key } |
             Request::SET { key, .. } => {
                 let hash = self.hash(key);
+                debug!("Hash: {:#018x}", hash);
                 for member in members {
                     let actor_ref = ActorRef::<DBMessage>::from(member);
                     match call!(actor_ref, DBMessage::Responsible, hash) {

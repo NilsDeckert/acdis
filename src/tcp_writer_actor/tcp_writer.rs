@@ -29,7 +29,7 @@ impl Actor for TcpWriterActor {
     }
 
     async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, write_half: &mut Self::State) -> Result<(), ActorProcessingErr> {
-        debug!("Received frame to write onto stream: {:#?}", message.0);
+        debug!("Received frame to write onto stream");
         send_tcp_reply(write_half, message.0).await;
         Ok(())
     }

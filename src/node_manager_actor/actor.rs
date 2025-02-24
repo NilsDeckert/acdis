@@ -98,12 +98,6 @@ impl Actor for NodeManagerActor {
         //
         // }
 
-        // TODO: Remove
-        let sessions = call!(pmd_ref, NodeServerMessage::GetSessions)?;
-        for session in sessions.keys() {
-            info!("{}", session);
-        }
-
         myself.send_message(Init)?;
             
         Ok(NodeManageActorState {

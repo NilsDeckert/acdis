@@ -1,5 +1,5 @@
-pub mod node_manager_actor;
 pub mod db_actor;
+pub mod node_manager_actor;
 pub mod parse_actor;
 pub mod tcp_listener_actor;
 pub mod tcp_reader_actor;

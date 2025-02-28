@@ -1,4 +1,4 @@
-use log::{debug};
+use log::debug;
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::encode;
 use redis_protocol::resp3::types::{OwnedFrame, Resp3Frame};
@@ -17,18 +17,27 @@ impl Actor for TcpWriterActor {
     type State = OwnedWriteHalf;
     type Arguments = OwnedWriteHalf;
 
-    async fn pre_start(&self, myself: ActorRef<Self::Msg>, write_half: Self::Arguments) -> Result<Self::State, ActorProcessingErr> {
+    async fn pre_start(
+        &self,
+        myself: ActorRef<Self::Msg>,
+        write_half: Self::Arguments,
+    ) -> Result<Self::State, ActorProcessingErr> {
         // Join process group to facilitate cross-node addressing
         debug!("Joining pg {}", write_half.peer_addr().unwrap().to_string());
         ractor::pg::join(
             write_half.peer_addr().unwrap().to_string(),
-            vec![myself.get_cell()]
+            vec![myself.get_cell()],
         );
-        
+
         Ok(write_half)
     }
 
-    async fn handle(&self, _myself: ActorRef<Self::Msg>, message: Self::Msg, write_half: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn handle(
+        &self,
+        _myself: ActorRef<Self::Msg>,
+        message: Self::Msg,
+        write_half: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
         debug!("Received frame to write onto stream");
         send_tcp_reply(write_half, message.0).await;
         Ok(())
@@ -40,12 +49,10 @@ async fn send_tcp_reply(stream: &mut OwnedWriteHalf, reply: OwnedFrame) {
     debug!("Sending out reply: {:#?}", reply);
 
     let mut encoded: Vec<u8> = vec![0u8; reply.encode_len(false)];
-    encode::complete::encode(
-        &mut encoded,
-        &reply,
-        false).expect("Failed to encode");
+    encode::complete::encode(&mut encoded, &reply, false).expect("Failed to encode");
 
-    stream.write_all(&encoded)
+    stream
+        .write_all(&encoded)
         .await
         .expect("Failed to send reply");
 

@@ -1,8 +1,8 @@
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 
-use std::sync::mpsc::{Sender, Receiver};
 use std::sync::mpsc;
+use std::sync::mpsc::{Receiver, Sender};
 
 fn send_messages_through_channels(tx: Sender<String>, rx: Receiver<String>, num: usize) {
     for _ in 0..num {

@@ -6,7 +6,7 @@ use fxhash::{FxHashMap, FxHasher};
 /// This includes trait implementations to conveniently convert between types.
 pub mod message;
 
-/// This module contains the enum of data types that can be stored in the [`actor::DBActor]s 
+/// This module contains the enum of data types that can be stored in the [`actor::DBActor]s
 /// HashMap.
 pub mod map_entry;
 

@@ -1,7 +1,7 @@
-use std::ops::Range;
+use crate::db_actor::actor::PartitionedHashMap;
 use ractor::RpcReplyPort;
 use ractor_cluster::RactorClusterMessage;
-use crate::db_actor::actor::PartitionedHashMap;
+use std::ops::Range;
 
 #[derive(RactorClusterMessage)]
 pub enum NodeManagerMessage {
@@ -12,5 +12,5 @@ pub enum NodeManagerMessage {
     AdoptKeyspace(Range<u64>, RpcReplyPort<PartitionedHashMap>),
     SetKeyspace(Range<u64>),
     #[rpc]
-    QueryNodes(RpcReplyPort<Vec<String>>)
+    QueryNodes(RpcReplyPort<Vec<String>>),
 }

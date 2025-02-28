@@ -1,7 +1,7 @@
-use std::fmt::{Display, Formatter};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::util::convert::AsFrame;
 use serde::{Deserialize, Serialize};
+use std::fmt::{Display, Formatter};
 
 #[derive(Serialize, Deserialize)]
 pub enum MapEntry {
@@ -47,7 +47,7 @@ impl Clone for MapEntry {
     fn clone(&self) -> Self {
         match self {
             MapEntry::STRING(a) => MapEntry::STRING(a.clone()),
-            MapEntry::USIZE(a) => MapEntry::USIZE(a.clone())
+            MapEntry::USIZE(a) => MapEntry::USIZE(a.clone()),
         }
     }
 }
@@ -56,7 +56,7 @@ impl Display for MapEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
             MapEntry::STRING(a) => write!(f, "{}", a),
-            MapEntry::USIZE(a) => write!(f, "{}", a)
+            MapEntry::USIZE(a) => write!(f, "{}", a),
         }
     }
 }

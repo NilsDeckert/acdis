@@ -7,9 +7,8 @@ use redis_protocol_bridge::util::convert::SerializableFrame;
 /// later handling.
 /// The result of the request encoded in `frame` is sent
 /// directly to `caller`.
-#[derive(RactorClusterMessage)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(RactorClusterMessage, serde::Serialize, serde::Deserialize)]
 pub struct ParseRequestMessage {
     pub frame: SerializableFrame,
-    pub reply_to: String
+    pub reply_to: String,
 }

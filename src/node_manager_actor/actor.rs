@@ -4,7 +4,7 @@ use std::ops::Range;
 use async_trait::async_trait;
 use futures::future::join_all;
 use log::{debug, error, info, warn};
-use ractor::{call, cast, pg, Actor, ActorCell, ActorId, ActorProcessingErr, ActorRef, SupervisionEvent};
+use ractor::{call, cast, pg, Actor, ActorCell, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor::SupervisionEvent::*;
 use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
 use ractor_cluster::{IncomingEncryptionMode, NodeEventSubscription, NodeServer, NodeServerMessage};
@@ -80,24 +80,6 @@ impl Actor for NodeManagerActor {
         // Wait to establish connection
         tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
-        // TODO: Query other nodes in cluster
-        // let pg_name = String::from("acdis_node_managers");
-        // let nodes = pg::get_members(&pg_name);
-        // for node in nodes {
-        //     let actor_ref = ActorRef::<NodeManagerMessage>::from(node);
-        //     let sessions = call!(actor_ref, QueryNodes)?;
-        //     info!("Other node is connected to");
-        //     for session in sessions {
-        //         if let Err(e) = ractor_cluster::client_connect(
-        //             &pmd_ref,
-        //             session
-        //         ).await {
-        //             error!("Failed to connect to node server: {}", e);
-        //         }
-        //     }
-        //
-        // }
-
         myself.send_message(Init)?;
             
         Ok(NodeManageActorState {
@@ -132,9 +114,9 @@ impl Actor for NodeManagerActor {
                     own.keyspace = keyspace.clone();
                     
                     // Only for testing. TODO: remove
-                    info!("We now manage the following key-value-pairs:");
+                    debug!("We now manage the following key-value-pairs:");
                     for (key, value) in map.map.clone() {
-                        info!(" - {}:{}", key, value);
+                        debug!(" - {}:{}", key, value);
                     }
                     
                     own.db_actors = Self::spawn_db_actors(DBActorArgs{ map: Some(map), range: keyspace},

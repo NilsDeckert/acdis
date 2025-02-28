@@ -64,7 +64,7 @@ impl ParseRequestActor {
     /// Return the* responsible actor for a given request.
     /// 
     /// \*For Requests that concern a specific key, the responsible actor is found by hashing the key.
-    /// Requests like PING can be handled by multiple actors, thus any actor might be return.
+    /// Requests like PING can be handled by multiple actors, thus any actor might be returned.
     /// 
     /// # Arguments 
     /// 
@@ -83,20 +83,31 @@ impl ParseRequestActor {
     /// 
     /// # Examples 
     /// 
-    /// ```rust
-    /// let request = Request::GET("my_key");
-    /// let responsible = self.find_responsible(&request).await?;
+    /// ```ignore
+    /// # use ractor::cast;
+    /// # use acdis::db_actor::message::{DBMessage, DBRequest};
+    /// # use acdis::parse_actor::parse_request_message::ParseRequestMessage;
+    /// # use acdis::parse_actor::parse_request_actor::ParseRequestActor;
+    /// # use redis_protocol_bridge::commands::parse::Request;
+    /// # use redis_protocol_bridge::util::convert::SerializableFrame;
+    /// # use redis_protocol::resp3::types::OwnedFrame;
+    /// # let message = ParseRequestMessage{frame: SerializableFrame(OwnedFrame::Null), reply_to: "actor".into()};
+    /// 
+    /// let actor = ParseRequestActor;
+    /// let request = Request::GET{ key: String::from("my_key") };
+    /// let responsible = actor.find_responsible(&request).await.unwrap();
+    /// 
     /// 
     /// cast!(
     ///    responsible,
     ///    DBMessage::Request(
-    ///        DBRequest{request, caller: message.caller}
+    ///        DBRequest{request, reply_to: message.reply_to}
     ///    )
     ///)?;
     /// ```
     async fn find_responsible(&self, request: &Request) -> Result<ActorRef<DBMessage>, ActorProcessingErr> {
         let group_name = "acdis".to_string();
-        let members = ractor::pg::get_members(&group_name);
+        let members = pg::get_members(&group_name);
         
         match request {
             Request::GET { key } |
@@ -130,7 +141,7 @@ impl ParseRequestActor {
         
     }
     
-    /// Hash the given key using [`crate::db_actor::actor::AHasher`]
+    /// Hash the given key using [`AHasher`]
     /// 
     /// # Arguments 
     /// 
@@ -140,8 +151,10 @@ impl ParseRequestActor {
     /// 
     /// # Examples 
     /// 
-    /// ```rust
-    /// let hash = self.hash("my_key");
+    /// ```ignore
+    /// # use acdis::parse_actor::parse_request_actor::ParseRequestActor;
+    /// # let actor = ParseRequestActor;
+    /// let hash = actor.hash("my_key");
     /// if (0..0xffaa).contains(hash) {
     ///     println!("We are responsible for this key.")
     /// }

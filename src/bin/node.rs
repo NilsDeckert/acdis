@@ -20,7 +20,7 @@ fn setup_logging() {
         .set_level_color(Level::Warn, Some(Color::Yellow))
         .set_level_color(Level::Info, Some(Color::Green))
         .set_level_color(Level::Debug, Some(Color::Blue))
-        .set_target_level(LevelFilter::Debug)
+        .set_target_level(LevelFilter::Info)
         .build();
 
     CombinedLogger::init(vec![TermLogger::new(

@@ -1,31 +1,24 @@
+use log::info;
+use std::collections::HashMap;
+use std::ops::Range;
+
+use ractor::{cast, Actor, ActorCell, ActorRef};
+use ractor_cluster::node::NodeConnectionMode;
+use ractor_cluster::NodeServerMessage::SubscribeToEvents;
+use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
+
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::message::DBMessage;
 use crate::node_manager_actor::message::NodeManagerMessage;
-use crate::node_manager_actor::message::NodeManagerMessage::*;
-use async_trait::async_trait;
-use futures::future::join_all;
-use log::{debug, error, info, warn};
-use ractor::SupervisionEvent::*;
-use ractor::{call, cast, pg, Actor, ActorCell, ActorProcessingErr, ActorRef, SupervisionEvent};
-use ractor_cluster::node::{NodeConnectionMode, NodeServerSessionInformation};
-use ractor_cluster::NodeServerMessage::{GetSessions, SubscribeToEvents};
-use ractor_cluster::{
-    IncomingEncryptionMode, NodeEventSubscription, NodeServer, NodeServerMessage,
-};
-use rand::Rng;
-use std::cmp::Ordering;
-use std::collections::HashMap;
-use std::ops::Range;
-use tokio::task::JoinHandle;
 
 pub struct NodeManagerActor;
 
 pub struct NodeManageActorState {
-    keyspace: Range<u64>,
-    db_actors: HashMap<Range<u64>, ActorRef<DBMessage>>,
-    node_server: ActorRef<NodeServerMessage>,
+    pub keyspace: Range<u64>,
+    pub db_actors: HashMap<Range<u64>, ActorRef<DBMessage>>,
+    pub node_server: ActorRef<NodeServerMessage>,
 }
 
 #[allow(dead_code)]
@@ -34,256 +27,10 @@ pub enum NodeType {
     Client,
 }
 
-#[async_trait]
-impl Actor for NodeManagerActor {
-    type Msg = NodeManagerMessage;
-    type State = NodeManageActorState;
-    type Arguments = NodeType;
-
-    async fn pre_start(
-        &self,
-        myself: ActorRef<Self::Msg>,
-        args: Self::Arguments,
-    ) -> Result<Self::State, ractor::ActorProcessingErr> {
-        let cluster_host_address = std::env::var("CLUSTER_HOST").unwrap_or("127.0.0.1".to_string());
-        let cluster_host_port = std::env::var("CLUSTER_PORT")
-            .unwrap_or(String::from("6381"))
-            .parse()
-            .unwrap();
-
-        let port;
-        let name;
-
-        let client_port = std::env::var("CLIENT_PORT")
-            .unwrap_or(String::from("0"))
-            .parse()
-            .unwrap();
-
-        // Set arguments that differ between server and client
-        match args {
-            NodeType::Server => {
-                port = cluster_host_port;
-                name = String::from("host_node");
-            }
-            NodeType::Client => {
-                let mut rng = rand::thread_rng();
-                port = client_port; // Let OS choose a port
-                name = myself
-                    .get_name()
-                    .unwrap_or(format!("Node {}", rng.gen::<u8>()));
-            }
-        }
-
-        let pmd_ref = NodeManagerActor::spawn_pmd(port, name).await;
-        NodeManagerActor::subscribe_to_events(myself.clone(), pmd_ref.clone()).await;
-
-        // If NodeType is Client, we assume there is already another NodeServer accepting connections
-        if let NodeType::Client = args {
-            ractor_cluster::client_connect(
-                &pmd_ref,
-                format!("{}:{}", cluster_host_address, cluster_host_port),
-            )
-            .await
-            .expect("Failed to connect to node server");
-        }
-
-        // Wait to establish connection
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
-
-        myself.send_message(Init)?;
-
-        Ok(NodeManageActorState {
-            keyspace: 0u64..u64::MAX,
-            db_actors: HashMap::new(),
-            node_server: pmd_ref,
-        })
-    }
-
-    async fn post_start(
-        &self,
-        _myself: ActorRef<Self::Msg>,
-        _state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        Ok(())
-    }
-
-    async fn handle(
-        &self,
-        myself: ActorRef<Self::Msg>,
-        message: Self::Msg,
-        own: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match message {
-            Init => {
-                debug!("Received init message");
-                let pg_name = String::from("acdis_node_managers");
-
-                let mut nodes = pg::get_members(&pg_name);
-                info!("Found {} other nodes.", nodes.len());
-                let keyspaces = Self::sort_actors_by_keyspace(&mut nodes).await;
-                if let Some((actor_ref, keyspace)) = keyspaces.into_iter().next() {
-                    info!("Other NodeManagers present, attempting to adopt keyspace");
-                    let (_, r2) = Self::halve_range(keyspace);
-
-                    // Inherit keys&values in that keyspace
-                    // TODO: if inheriting fails, maybe try next node
-                    let map =
-                        call!(actor_ref, AdoptKeyspace, r2).expect("Failed to adopt keyspace");
-                    let keyspace = map.range.clone();
-                    own.keyspace = keyspace.clone();
-
-                    // Only for testing. TODO: remove
-                    debug!("We now manage the following key-value-pairs:");
-                    for (key, value) in map.map.clone() {
-                        debug!(" - {}:{}", key, value);
-                    }
-
-                    own.db_actors = Self::spawn_db_actors(
-                        DBActorArgs {
-                            map: Some(map),
-                            range: keyspace,
-                        },
-                        8,
-                        myself.clone(),
-                    )
-                    .await;
-                } else {
-                    info!("Could not find any other NodeManager");
-                    own.db_actors = Self::spawn_db_actors(
-                        DBActorArgs {
-                            map: None,
-                            range: 0u64..u64::MAX,
-                        },
-                        8,
-                        myself.clone(),
-                    )
-                    .await;
-                }
-
-                // Join later to avoid sending messages to ourselves
-                pg::join(pg_name.clone(), vec![myself.get_cell()]);
-            }
-            QueryKeyspace(reply) => {
-                debug!("Received QueryKeyspace");
-                reply.send(own.keyspace.clone())?;
-            }
-            SetKeyspace(range) => {
-                // TODO
-                info!("Setting keyspace to {:#?}", range);
-                own.keyspace = range;
-                if myself.get_children().is_empty() {
-                    own.db_actors = NodeManagerActor::spawn_db_actors(
-                        DBActorArgs {
-                            map: None,
-                            range: own.keyspace.clone(),
-                        },
-                        8,
-                        myself.clone(),
-                    )
-                    .await;
-                }
-            }
-            AdoptKeyspace(keyspace, reply) => {
-                info!(
-                    "{} Giving away keyspace {:#018x}..{:#018x}",
-                    myself.get_name().unwrap_or(String::from("node_manager")),
-                    keyspace.start,
-                    keyspace.end
-                );
-
-                assert_ne!(keyspace, own.keyspace); // Don't give up whole keyspace.
-                                                    // Keyspace must be at one end of our keyspace
-                assert!(
-                    (keyspace.start == own.keyspace.start && keyspace.end < own.keyspace.end)
-                        || (keyspace.start > own.keyspace.start
-                            && keyspace.end == own.keyspace.end)
-                );
-
-                let mut return_map = PartitionedHashMap {
-                    map: HashMap::new(),
-                    range: keyspace.clone(),
-                };
-
-                let mut to_remove = vec![];
-
-                // Assumption: keyspace >= actor_keyspace
-                for (actor_keyspace, actor) in &own.db_actors {
-                    // Keyspace of this actor is completely inside
-                    // the requested keyspace
-                    if actor_keyspace.start >= keyspace.start && actor_keyspace.end <= keyspace.end
-                    {
-                        // ""Kill"" actor and fetch HashMap
-                        // TODO: Currently the actor is not stopped
-                        info!(
-                            "'Killing' actor {:?} for keyspace {:#?}",
-                            actor, actor_keyspace
-                        );
-                        let actor_hashmap = call!(actor, DBMessage::Drain);
-                        return_map.map.extend(actor_hashmap.unwrap());
-
-                        to_remove.push(actor_keyspace.clone());
-                    } else if actor_keyspace.end <= keyspace.start
-                        || actor_keyspace.start >= keyspace.end
-                    {
-                        // Actor does not overlap with requested keyspace
-                        // Ignore
-                    } else {
-                        warn!(
-                            "Did not cover this case:\n\
-                        The keyspace of this actor ({:#018x}..{:#018x}) is not fully inside the \
-                        requested keyspace ({:#018x}..{:#018x})",
-                            actor_keyspace.start, actor_keyspace.end, keyspace.start, keyspace.end
-                        )
-                    }
-                }
-
-                // Forget actors whose keyspace we gave away
-                for ks in to_remove {
-                    own.db_actors.remove(&ks);
-                }
-
-                reply.send(return_map)?;
-            }
-            QueryNodes(reply) => {
-                debug!("Received QueryNodes");
-                let sessions = call!(own.node_server, GetSessions)?;
-                let mut ret = vec![];
-                for session in sessions.values() {
-                    let addr = &session.peer_addr;
-                    info!("Connected to: {}", addr);
-                    ret.push(String::from(addr))
-                }
-
-                reply.send(ret)?;
-            }
-        }
-        Ok(())
-    }
-
-    async fn handle_supervisor_evt(
-        &self,
-        _myself: ActorRef<Self::Msg>,
-        event: SupervisionEvent,
-        _state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        match event {
-            ActorStarted(_cell) => {}
-            ActorFailed(_cell, _error) => {}
-            ActorTerminated(_cell, _last_state, _reason) => {}
-            ProcessGroupChanged(_message) => {}
-            _ => {}
-        }
-        Ok(())
-    }
-}
-
 impl NodeManagerActor {
     /// Initialize and spawn a [`NodeServer`], thus accepting connections for communication across
     /// nodes.
-    async fn spawn_pmd(
-        port: u16,
-        name: String,
-    ) -> ActorRef<ractor_cluster::node::NodeServerMessage> {
+    pub(crate) async fn spawn_pmd(port: u16, name: String) -> ActorRef<NodeServerMessage> {
         // Init port mapper daemon that handles internode communication
         let pmd = NodeServer::new(
             port,
@@ -302,56 +49,6 @@ impl NodeManagerActor {
         pmd_ref
     }
 
-    async fn subscribe_to_events(
-        myself: ActorRef<NodeManagerMessage>,
-        pmd_ref: ActorRef<ractor_cluster::node::NodeServerMessage>,
-    ) {
-        // Trigger methods when other nodes connect / disconnect
-        cast!(
-            pmd_ref,
-            SubscribeToEvents {
-                id: String::from("Subscription"),
-                subscription: Box::new(Subscription(myself))
-            }
-        )
-        .expect("Failed to send Subscription msg")
-    }
-
-    /// Divide a given [`Range`] into equally sized parts.
-    ///
-    /// # **Warning**
-    /// We want to use the entire keyspace from 0x00 to u64MAX.
-    /// However, we cannot really express this, since we can't return U64MAX+1. TODO.
-    ///
-    /// # Arguments
-    /// * `range`: Keyspace to split
-    /// * `chunks`: Number of chunks to return.
-    ///
-    /// returns: Vec<(u64, u64), Global>
-    fn chunk_ranges(range: Range<u64>, chunks: u64) -> Vec<Range<u64>> {
-        let size = (range.end) - range.start;
-
-        let values_per_chunk = size / chunks;
-        let mut ranges: Vec<Range<u64>> = Vec::new();
-
-        let mut start = range.start;
-
-        for i in 0..chunks {
-            let mut end = start + values_per_chunk;
-            // If this is the last chunk, make this contain the extra elements
-            if i == chunks - 1 {
-                //end += size%chunks;
-            } else {
-                // If this is not the last chunk, increase this by one as it is exclusive
-                end += 1
-            }
-            ranges.push(start..end);
-            start = end;
-        }
-
-        ranges
-    }
-
     /// Spawn and link DB actors
     ///
     /// # Arguments
@@ -363,7 +60,7 @@ impl NodeManagerActor {
     ///
     /// # Return
     /// Returns a HashMap that maps a Range (Keyspace) to a responsible actor
-    async fn spawn_db_actors(
+    pub(crate) async fn spawn_db_actors(
         args: DBActorArgs,
         actors_to_join: u64,
         supervisor: ActorRef<NodeManagerMessage>,
@@ -385,13 +82,12 @@ impl NodeManagerActor {
                 })
             }
 
-            if let Some(mut argsmap) = args.map {
-                for (key, value) in argsmap.map.drain() {
-                    for map in &mut initial_maps {
-                        if map.in_range(&key) {
-                            map.map.insert(key, value);
-                            break;
-                        }
+            let mut argsmap = args.map.unwrap();
+            for (key, value) in argsmap.map.drain() {
+                for map in &mut initial_maps {
+                    if map.in_range(&key) {
+                        map.map.insert(key, value);
+                        break;
                     }
                 }
             }
@@ -439,102 +135,21 @@ impl NodeManagerActor {
         ret_map
     }
 
-    /// Given a range, split it and return both halves
-    /// Of size of range is odd, first half will contain the extra element
-    fn halve_range(range: Range<u64>) -> (Range<u64>, Range<u64>) {
-        let length = (range.end - 1) - range.start; // End of range is not inside range
-        let half_length = length.div_ceil(2);
-        let mid = range.start + half_length + 1;
-        (range.start..mid, mid..range.end)
-    }
-
-    async fn sort_actors_by_keyspace(
-        actors: &mut Vec<ActorCell>,
-    ) -> Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> {
-        let tasks: Vec<JoinHandle<(ActorRef<NodeManagerMessage>, Range<u64>)>> = actors
-            .into_iter()
-            .map(|actor| {
-                let actor_ref = ActorRef::<NodeManagerMessage>::from(actor.clone());
-                tokio::spawn(async move {
-                    let keyspace = actor_ref.call(QueryKeyspace, None).await;
-                    (
-                        actor_ref,
-                        keyspace.unwrap().expect("Failed to query keyspace"),
-                    )
-                })
-            })
-            .collect();
-
-        let mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> = join_all(tasks)
-            .await
-            .into_iter()
-            .map(|result| {
-                let (id, range) = result.expect("Failed awaiting QueryKeyspace response");
-                (id, range)
-            })
-            .collect();
-
-        keyspaces.sort_by_key(|(_id, keyspace)| keyspace.end - keyspace.start);
-        keyspaces
-    }
-
-    /*        actors.sort_by(|actor_a, actor_b| {
-                let keyspace_a: Range<u64> = keyspaces.get(actor_a.get_id());
-                let keyspace_b: Range<u64> = keyspaces.get(actor_b.get_id());
-
-                return if (keyspace_a.end - keyspace_a.start) > (keyspace_b.end - keyspace_b.start) {
-                    Ordering::Greater
-                } else if (keyspace_a.end - keyspace_a.start) < (keyspace_b.end - keyspace_b.start) {
-                    Ordering::Less
-                } else {
-                    Ordering::Equal
-                }
-            });
-        }
-    */
-}
-#[allow(dead_code)]
-struct Subscription(ActorRef<NodeManagerMessage>);
-
-impl NodeEventSubscription for Subscription {
-    fn node_session_opened(&self, _ses: NodeServerSessionInformation) {
-        // info!("Session opened: \n\
-        //     node_id:    {:#?} \n\
-        //     peer_addr:  {:#?} \n\
-        //     peer_name:  {:#?} \n\
-        //     is_server:  {:#?}",
-        //     ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
-        //
-        // let registered = ractor::registry::registered();
-        // info!("Registered: {:#?}", registered);
-        //
-        // let pids = ractor::registry::get_all_pids();
-        // info!("Pids: {:#?}", pids);
-        // info!("\n\n\n\n\n\n")
-    }
-
-    fn node_session_disconnected(&self, ses: NodeServerSessionInformation) {
-        info!("Session disconnected: {:#?}", ses.node_id);
-    }
-
-    fn node_session_authenicated(&self, _ses: NodeServerSessionInformation) {
-        // info!("Session authenticated: {:#?}", ses.node_id);
-    }
-
-    fn node_session_ready(&self, ses: NodeServerSessionInformation) {
-        info!("Session ready: {:?}@{}", ses.peer_name, ses.peer_addr);
-        // info!("Session ready: \n\
-        //     node_id:    {:#?} \n\
-        //     peer_addr:  {:#?} \n\
-        //     peer_name:  {:#?} \n\
-        //     is_server:  {:#?}",
-        //     ses.node_id, ses.peer_addr, ses.peer_name, ses.is_server);
-        //
-        // let registered = ractor::registry::registered();
-        // info!("Registered: {:#?}", registered);
-        //
-        // let pids = ractor::registry::get_all_pids();
-        // info!("Pids: {:#?}", pids);
+    /// Return address and port of cluster master.
+    ///
+    /// Uses environment values CLUSTER_HOST & CLUSTER_PORT or default
+    /// values `127.0.0.1` & `6381`
+    ///
+    /// # Returns
+    ///  - Address to connect to
+    ///  - Port to connect to
+    pub(crate) fn get_host_address() -> (String, u16) {
+        let cluster_host_address = std::env::var("CLUSTER_HOST").unwrap_or("127.0.0.1".to_string());
+        let cluster_host_port = std::env::var("CLUSTER_PORT")
+            .unwrap_or(String::from("6381"))
+            .parse()
+            .unwrap();
+        (cluster_host_address, cluster_host_port)
     }
 }
 
@@ -553,11 +168,5 @@ mod tests {
         let halved_ranges = NodeManagerActor::halve_range(0..11);
         assert_eq!(chunked_ranges[0], halved_ranges.0);
         assert_eq!(chunked_ranges[1], halved_ranges.1);
-    }
-
-    #[test]
-    fn test_chunk_range() {
-        let chunked_ranges = NodeManagerActor::chunk_ranges(0x0..0xf, 16);
-        let expected = vec![(0x0..0x2), (0x1..0x2)];
     }
 }

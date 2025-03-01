@@ -30,10 +30,6 @@ impl PartitionedHashMap {
         if self.range.contains(&hash) {
             true
         } else {
-            debug!(
-                "Hash({:#x}) not in range {:#018x}..{:#018x}",
-                hash, self.range.start, self.range.end
-            );
             false
         }
     }

@@ -46,7 +46,7 @@ impl Actor for TcpWriterActor {
 
 /// Serialize reply frame and write it to the tcp stream
 async fn send_tcp_reply(stream: &mut OwnedWriteHalf, reply: OwnedFrame) {
-    debug!("Sending out reply: {:#?}", reply);
+    // debug!("Sending out reply: {:#?}", reply);
 
     let mut encoded: Vec<u8> = vec![0u8; reply.encode_len(false)];
     encode::complete::encode(&mut encoded, &reply, false).expect("Failed to encode");

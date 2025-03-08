@@ -1,6 +1,6 @@
 #![allow(unused_imports)]
 use futures::future::join_all;
-use log::{info, Level, LevelFilter};
+use log::{info, warn, Level, LevelFilter};
 use ractor::{call, pg, Actor, ActorCell, ActorRef};
 use ractor_cluster;
 use ractor_cluster::node::NodeConnectionMode;
@@ -23,8 +23,15 @@ fn setup_logging() {
         .set_target_level(LevelFilter::Info)
         .build();
 
+    // For release builds, only print warnings and errors
+    let level_filter = if cfg!(debug_assertions) {
+        LevelFilter::Info
+    } else {
+        LevelFilter::Warn
+    };
+
     CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Debug,
+        level_filter,
         logconfig.clone(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
@@ -36,11 +43,20 @@ fn setup_logging() {
 async fn main() {
     setup_logging();
 
-    let (_manager_ref, _manager_handler) = Actor::spawn(None, NodeManagerActor, NodeType::Client)
-        .await
-        .expect("Failed to spawn node manager");
+    let (manager_ref, manager_handler) = Actor::spawn(
+        Some(String::from("ClusterNodeManager")),
+        NodeManagerActor,
+        NodeType::Client,
+    )
+    .await
+    .expect("Failed to spawn node manager");
 
     tokio::signal::ctrl_c()
         .await
         .expect("Failed waiting for ctrl c");
+
+    warn!("Received ctrl+c. Terminating....");
+    manager_ref.kill();
+    // manager_ref.stop(Some(String::from("Node shutting down")));
+    manager_handler.await.unwrap();
 }

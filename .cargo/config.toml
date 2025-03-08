@@ -1,0 +1,4 @@
+[env]
+CLUSTER_HOST="localhost"
+CLUSTER_PORT="6382"
+CLUSTER_COOKIE="cookie"

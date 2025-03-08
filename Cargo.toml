@@ -2,11 +2,7 @@
 name = "acdis"
 version = "0.1.0"
 edition = "2021"
-
-[env]
-CLUSTER_HOST="localhost"
-CLUSTER_PORT="6381"
-CLUSTER_COOKIE="cookie"
+default-run = "acdis"
 
 [dependencies]
 #ractor = { version = "0.15.2", features = ["async-trait", "cluster", "blanket_serde"] }

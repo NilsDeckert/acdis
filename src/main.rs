@@ -4,8 +4,7 @@ use ractor::Actor;
 
 use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
 use crate::tcp_listener_actor::tcp_listener::TcpListenerActor;
-#[allow(unused_imports)]
-use log::{debug, info, Level, LevelFilter};
+use log::{Level, LevelFilter};
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 
 mod db_actor;
@@ -24,8 +23,15 @@ fn setup_logging() {
         .set_target_level(LevelFilter::Debug)
         .build();
 
+    // For release builds, only print warnings and errors
+    let level_filter = if cfg!(debug_assertions) {
+        LevelFilter::Info
+    } else {
+        LevelFilter::Warn
+    };
+
     CombinedLogger::init(vec![TermLogger::new(
-        LevelFilter::Info,
+        level_filter,
         logconfig.clone(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
@@ -37,9 +43,13 @@ fn setup_logging() {
 async fn main() {
     setup_logging();
 
-    let (_manager_ref, _manager_handler) = Actor::spawn(None, NodeManagerActor, NodeType::Server)
-        .await
-        .expect("Failed to spawn node manager");
+    let (_manager_ref, _manager_handler) = Actor::spawn(
+        Some(String::from("NodeManager")),
+        NodeManagerActor,
+        NodeType::Server,
+    )
+    .await
+    .expect("Failed to spawn node manager");
 
     let (_tcp_actor, tcp_handler) = Actor::spawn(
         Some(String::from("TcpListenerActor")),

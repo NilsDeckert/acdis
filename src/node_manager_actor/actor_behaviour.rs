@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use log::{debug, info, warn};
+use log::{debug, error, info, warn};
 use rand::Rng;
 use std::collections::HashMap;
 
@@ -55,16 +55,25 @@ impl Actor for NodeManagerActor {
 
         // If NodeType is Client, we assume there is already another NodeServer accepting connections
         if let NodeType::Client = args {
-            ractor_cluster::client_connect(
-                &pmd_ref,
-                format!("{}:{}", cluster_host_address, cluster_host_port),
-            )
-            .await
-            .expect("Failed to connect to node server");
+            loop {
+                match ractor_cluster::client_connect(
+                    &pmd_ref,
+                    format!("{}:{}", cluster_host_address, cluster_host_port),
+                )
+                .await
+                {
+                    Ok(_) => {
+                        // Wait to establish connection
+                        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                        break;
+                    }
+                    Err(e) => {
+                        error!("Failed to connect to node server: {}", e);
+                        tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+                    }
+                }
+            }
         }
-
-        // Wait to establish connection
-        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
 
         myself.send_message(Init)?;
 
@@ -80,15 +89,6 @@ impl Actor for NodeManagerActor {
         _myself: ActorRef<Self::Msg>,
         _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        Ok(())
-    }
-
-    async fn post_stop(
-        &self,
-        _myself: ActorRef<Self::Msg>,
-        _state: &mut Self::State,
-    ) -> Result<(), ActorProcessingErr> {
-        warn!("SHUTTING DOWN");
         Ok(())
     }
 
@@ -258,11 +258,21 @@ impl Actor for NodeManagerActor {
         _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match event {
-            ActorStarted(_cell) => {}
-            ActorFailed(_cell, _error) => {}
-            ActorTerminated(_cell, _last_state, _reason) => {}
-            ProcessGroupChanged(_message) => {}
-            _ => {}
+            ActorStarted(_actor) => {}
+            ActorTerminated(_actor, _opt_state, _opt_reason) => {
+                warn!(" Actor got terminated");
+                if let Some(_state) = _opt_state {
+                    warn!("  Received state")
+                }
+                if let Some(reason) = _opt_reason {
+                    warn!("  Reason: {}", reason)
+                }
+            }
+            ActorFailed(_actor, _err) => {
+                error!(" Supervised actor failed");
+            }
+            ProcessGroupChanged(_actor) => {}
+            PidLifecycleEvent(_actor) => {}
         }
         Ok(())
     }

@@ -2,9 +2,8 @@ use log::info;
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ractor::{cast, Actor, ActorCell, ActorRef};
+use ractor::{Actor, ActorRef};
 use ractor_cluster::node::NodeConnectionMode;
-use ractor_cluster::NodeServerMessage::SubscribeToEvents;
 use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
 
 use crate::db_actor::actor::DBActor;
@@ -15,6 +14,7 @@ use crate::node_manager_actor::message::NodeManagerMessage;
 
 pub struct NodeManagerActor;
 
+#[derive(Clone)]
 pub struct NodeManageActorState {
     pub keyspace: Range<u64>,
     pub db_actors: HashMap<Range<u64>, ActorRef<DBMessage>>,

@@ -1,8 +1,10 @@
 use futures::future::join_all;
-use ractor::{ActorCell, ActorRef};
+use ractor::{Actor, ActorCell, ActorErr, ActorProcessingErr, ActorRef};
 use std::ops::Range;
-use tokio::task::JoinHandle;
-
+use futures::SinkExt;
+use ractor::pg::join;
+use tokio::task::{JoinError, JoinHandle};
+use acdis::node_manager_actor::NodeManagerRef;
 use crate::node_manager_actor::actor::NodeManagerActor;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
@@ -17,25 +19,39 @@ impl NodeManagerActor {
         (range.start..mid, mid..range.end)
     }
 
-    pub(crate) async fn sort_actors_by_keyspace(
-        actors: &mut Vec<ActorCell>,
-    ) -> Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> {
-        let tasks: Vec<JoinHandle<(ActorRef<NodeManagerMessage>, Range<u64>)>> = actors
+    pub(crate) async fn query_keyspaces(
+        actors: &mut Vec<ActorCell>
+    ) -> Result<Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>, ActorProcessingErr> {
+        
+        let tasks: Vec<JoinHandle<Result<(ActorRef<NodeManagerMessage>, Range<u64>), ActorProcessingErr>>> = actors
             .into_iter()
             .map(|actor| {
                 let actor_ref = ActorRef::<NodeManagerMessage>::from(actor.clone());
                 tokio::spawn(async move {
                     let keyspace = actor_ref.call(QueryKeyspace, None).await;
-                    (
+                    Ok((
                         actor_ref,
                         keyspace.unwrap().expect("Failed to query keyspace"),
-                    )
+                    ))
                 })
             })
             .collect();
 
-        let mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> = join_all(tasks)
-            .await
+        let results: Vec<Result<Result<(ActorRef<_>, Range<u64>), ActorProcessingErr>, JoinError>> = join_all(tasks).await;
+        
+        results.into_iter().map(|res|{
+            match res {
+                Ok(res) => res,
+                Err(join_error) => Err(ActorProcessingErr::from(join_error)),
+            }
+        }).collect()
+    }
+
+    pub(crate) async fn sort_actors_by_keyspace(
+        actors: &mut Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>,
+    ) -> Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> {
+
+        let mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> = actors
             .into_iter()
             .map(|result| {
                 let (id, range) = result.expect("Failed awaiting QueryKeyspace response");

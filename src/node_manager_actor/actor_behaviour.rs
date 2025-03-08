@@ -81,6 +81,7 @@ impl Actor for NodeManagerActor {
             keyspace: 0u64..u64::MAX,
             db_actors: HashMap::new(),
             node_server: pmd_ref,
+            other_nodes: HashMap::new(),
         })
     }
 

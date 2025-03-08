@@ -1,10 +1,7 @@
 use futures::future::join_all;
-use ractor::{Actor, ActorCell, ActorErr, ActorProcessingErr, ActorRef};
+use ractor::{ActorCell, ActorProcessingErr, ActorRef};
 use std::ops::Range;
-use futures::SinkExt;
-use ractor::pg::join;
 use tokio::task::{JoinError, JoinHandle};
-use acdis::node_manager_actor::NodeManagerRef;
 use crate::node_manager_actor::actor::NodeManagerActor;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
@@ -23,41 +20,41 @@ impl NodeManagerActor {
         actors: &mut Vec<ActorCell>
     ) -> Result<Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>, ActorProcessingErr> {
         
-        let tasks: Vec<JoinHandle<Result<(ActorRef<NodeManagerMessage>, Range<u64>), ActorProcessingErr>>> = actors
+        let tasks: Vec<JoinHandle<(ActorRef<NodeManagerMessage>, Range<u64>)>> = actors
             .into_iter()
             .map(|actor| {
                 let actor_ref = ActorRef::<NodeManagerMessage>::from(actor.clone());
                 tokio::spawn(async move {
                     let keyspace = actor_ref.call(QueryKeyspace, None).await;
-                    Ok((
+                    (
                         actor_ref,
                         keyspace.unwrap().expect("Failed to query keyspace"),
-                    ))
+                    )
                 })
             })
             .collect();
-
-        let results: Vec<Result<Result<(ActorRef<_>, Range<u64>), ActorProcessingErr>, JoinError>> = join_all(tasks).await;
         
-        results.into_iter().map(|res|{
-            match res {
-                Ok(res) => res,
-                Err(join_error) => Err(ActorProcessingErr::from(join_error)),
-            }
-        }).collect()
+        // Panics inside a thread return a JoinError
+        let join_results: Vec<Result<(ActorRef<_>, Range<u64>), JoinError>> = join_all(tasks).await;
+        // Instead of returning a Vec where some of the elements might be Errors, we want to either
+        // return a successful Vec or an Error.
+        let result: Result<Vec<_>, JoinError> = join_results.into_iter().collect();
+        match result {
+            Ok(t) => Ok(t),
+            Err(e) => Err(ActorProcessingErr::from(e))
+        }
     }
 
+    /// Sort a list of (Actor, Keyspace) tuples by the size of the keyspace.
+    /// 
+    /// # Arguments 
+    /// 
+    /// * `keyspaces`: A tuple ([`ActorRef`], Range<u64>)
+    /// 
+    /// returns: Vec<(ActorRef<NodeManagerMessage>, Range<u64>), Global> 
     pub(crate) async fn sort_actors_by_keyspace(
-        actors: &mut Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>,
+       mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>,
     ) -> Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> {
-
-        let mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> = actors
-            .into_iter()
-            .map(|result| {
-                let (id, range) = result.expect("Failed awaiting QueryKeyspace response");
-                (id, range)
-            })
-            .collect();
 
         keyspaces.sort_by_key(|(_id, keyspace)| keyspace.end - keyspace.start);
         keyspaces

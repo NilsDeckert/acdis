@@ -107,7 +107,8 @@ impl Actor for NodeManagerActor {
                 let mut nodes = pg::get_members(&pg_name);
                 info!("Found {} other nodes.", nodes.len());
 
-                let keyspaces = Self::sort_actors_by_keyspace(&mut nodes).await;
+                let mut keyspaces = Self::query_keyspaces(&mut nodes).await?;
+                keyspaces = Self::sort_actors_by_keyspace(keyspaces).await;
 
                 // Adopt half of the largest keyspace managed by another node
                 if let Some((actor_ref, keyspace)) = keyspaces.into_iter().next() {

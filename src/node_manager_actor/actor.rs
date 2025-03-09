@@ -2,29 +2,16 @@ use log::info;
 use std::collections::HashMap;
 use std::ops::Range;
 
-use ractor::{Actor, ActorRef};
-use ractor_cluster::node::NodeConnectionMode;
-use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
-use crate::node_manager_actor::NodeManagerRef;
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::message::DBMessage;
 use crate::node_manager_actor::message::NodeManagerMessage;
+use ractor::{Actor, ActorRef};
+use ractor_cluster::node::NodeConnectionMode;
+use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
 
 pub struct NodeManagerActor;
-
-#[derive(Clone)]
-pub struct NodeManageActorState {
-    /// The keyspace that is managed by this node
-    pub keyspace: Range<u64>,
-    /// This node's actors, identified by their part of the keyspace
-    pub db_actors: HashMap<Range<u64>, ActorRef<DBMessage>>,
-    /// The [`NodeServer`] that manages external connections for this node
-    pub node_server: ActorRef<NodeServerMessage>,
-    /// The other NodeManagers in this cluster, identified by their keyspace
-    pub other_nodes: HashMap<Range<u64>, NodeManagerRef>
-}
 
 #[allow(dead_code)]
 pub enum NodeType {

@@ -1,5 +1,6 @@
 use crate::db_actor::message::{DBMessage, DBRequest};
 use crate::db_actor::AHasher;
+use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
 use log::{debug, error, warn};
 use ractor::{async_trait, call, cast, pg, Actor, ActorProcessingErr, ActorRef};
@@ -37,7 +38,7 @@ impl Actor for ParseRequestActor {
         let query = redis_protocol_bridge::parse_owned_frame(message.frame.0);
         let request = redis_protocol_bridge::commands::parse::parse(query);
 
-        let reply_to_vec = ractor::pg::get_members(&message.reply_to);
+        let reply_to_vec = pg::get_members(&message.reply_to);
         assert_eq!(
             reply_to_vec.len(),
             1,
@@ -63,7 +64,7 @@ impl Actor for ParseRequestActor {
 
                 cast!(
                     responsible,
-                    DBMessage::Request(DBRequest {
+                    NodeManagerMessage::Forward(DBRequest {
                         request,
                         reply_to: message.reply_to
                     })
@@ -75,7 +76,7 @@ impl Actor for ParseRequestActor {
 }
 
 impl ParseRequestActor {
-    /// Return the* responsible actor for a given request.
+    /// Return the* responsible node manager for a given request.
     ///
     /// \*For Requests that concern a specific key, the responsible actor is found by hashing the key.
     /// Requests like PING can be handled by multiple actors, thus any actor might be returned.
@@ -84,12 +85,13 @@ impl ParseRequestActor {
     ///
     /// * `request`: [`Request`] that needs to be handled.
     ///
-    /// returns: Result<ActorRef<DBMessage>, Box<dyn Error+Send+Sync, Global>>
+    /// returns: Result<ActorRef<NodeManagerMessage>, Box<dyn Error+Send+Sync, Global>>
     ///
     /// # Implementation
     ///
-    /// Currently, this is done very inefficiently by querying every actor and asking whether it is
+    /// Currently, this is done somewhat inefficiently by querying every node manager and asking whether it is
     /// responsible for hash of the given key.
+    /// By querying node managers instead of DBActors we restrict the effort a bit.
     ///
     /// Possible ways to improve this include:
     ///  - Keep a some sort of data structure that maps keys to responsible actors.
@@ -114,7 +116,7 @@ impl ParseRequestActor {
     ///
     /// cast!(
     ///    responsible,
-    ///    DBMessage::Request(
+    ///    NodeManagerMessage::Forward(
     ///        DBRequest{request, reply_to: message.reply_to}
     ///    )
     ///)?;
@@ -122,24 +124,25 @@ impl ParseRequestActor {
     async fn find_responsible(
         &self,
         request: &Request,
-    ) -> Result<ActorRef<DBMessage>, ActorProcessingErr> {
-        let group_name = "acdis".to_string();
+    ) -> Result<ActorRef<NodeManagerMessage>, ActorProcessingErr> {
+        let group_name = "acdis_node_managers".to_string();
         let members = pg::get_members(&group_name);
 
         match request {
             Request::GET { key } | Request::SET { key, .. } => {
-                let hash = self.hash(key);
+                let hash = ParseRequestActor::hash(key);
                 debug!("Hash: {:#018x}", hash);
                 for member in members {
-                    let actor_ref = ActorRef::<DBMessage>::from(member);
-                    match call!(actor_ref, DBMessage::Responsible, hash) {
+                    let actor_ref = ActorRef::<NodeManagerMessage>::from(member);
+
+                    match call!(actor_ref, NodeManagerMessage::Responsible, hash) {
                         Ok(responsible) => {
                             if responsible {
                                 return Ok(actor_ref);
                             }
                         }
                         Err(e) => {
-                            warn!("Error calling db_actor: {}", e);
+                            warn!("Error calling node manager: {}", e);
                         }
                     }
                 }
@@ -149,7 +152,7 @@ impl ParseRequestActor {
 
         if let Some(member) = pg::get_members(&group_name).first() {
             debug!("Responsible actor: {}", member.get_id().pid());
-            Ok(ActorRef::<DBMessage>::from(member.clone()))
+            Ok(ActorRef::<NodeManagerMessage>::from(member.clone()))
         } else {
             error!("Couldn't find responsible actor");
             Err(ActorProcessingErr::from(
@@ -176,7 +179,7 @@ impl ParseRequestActor {
     ///     println!("We are responsible for this key.")
     /// }
     /// ```
-    fn hash(&self, key: &String) -> u64 {
+    pub(crate) fn hash(key: &String) -> u64 {
         let mut hasher = AHasher::default();
         hasher.write(key.as_bytes());
         hasher.finish()

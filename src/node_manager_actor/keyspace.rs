@@ -1,10 +1,10 @@
+use crate::node_manager_actor::actor::NodeManagerActor;
+use crate::node_manager_actor::message::NodeManagerMessage;
+use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
 use futures::future::join_all;
 use ractor::{ActorCell, ActorProcessingErr, ActorRef};
 use std::ops::Range;
 use tokio::task::{JoinError, JoinHandle};
-use crate::node_manager_actor::actor::NodeManagerActor;
-use crate::node_manager_actor::message::NodeManagerMessage;
-use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
 
 impl NodeManagerActor {
     /// Given a range, split it and return both halves
@@ -17,9 +17,8 @@ impl NodeManagerActor {
     }
 
     pub(crate) async fn query_keyspaces(
-        actors: &mut Vec<ActorCell>
+        actors: &mut Vec<ActorCell>,
     ) -> Result<Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>, ActorProcessingErr> {
-        
         let tasks: Vec<JoinHandle<(ActorRef<NodeManagerMessage>, Range<u64>)>> = actors
             .into_iter()
             .map(|actor| {
@@ -33,7 +32,7 @@ impl NodeManagerActor {
                 })
             })
             .collect();
-        
+
         // Panics inside a thread return a JoinError
         let join_results: Vec<Result<(ActorRef<_>, Range<u64>), JoinError>> = join_all(tasks).await;
         // Instead of returning a Vec where some of the elements might be Errors, we want to either
@@ -41,21 +40,20 @@ impl NodeManagerActor {
         let result: Result<Vec<_>, JoinError> = join_results.into_iter().collect();
         match result {
             Ok(t) => Ok(t),
-            Err(e) => Err(ActorProcessingErr::from(e))
+            Err(e) => Err(ActorProcessingErr::from(e)),
         }
     }
 
     /// Sort a list of (Actor, Keyspace) tuples by the size of the keyspace.
-    /// 
-    /// # Arguments 
-    /// 
+    ///
+    /// # Arguments
+    ///
     /// * `keyspaces`: A tuple ([`ActorRef`], Range<u64>)
-    /// 
-    /// returns: Vec<(ActorRef<NodeManagerMessage>, Range<u64>), Global> 
+    ///
+    /// returns: Vec<(ActorRef<NodeManagerMessage>, Range<u64>), Global>
     pub(crate) async fn sort_actors_by_keyspace(
-       mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>,
+        mut keyspaces: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>,
     ) -> Vec<(ActorRef<NodeManagerMessage>, Range<u64>)> {
-
         keyspaces.sort_by_key(|(_id, keyspace)| keyspace.end - keyspace.start);
         keyspaces
     }

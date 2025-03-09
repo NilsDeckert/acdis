@@ -9,9 +9,10 @@ use ractor_cluster::NodeServerMessage::GetSessions;
 
 use crate::db_actor::actor::{DBActorArgs, PartitionedHashMap};
 use crate::db_actor::message::DBMessage;
-use crate::node_manager_actor::actor::{NodeManageActorState, NodeManagerActor, NodeType};
+use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::*;
+use crate::node_manager_actor::state::NodeManageActorState;
 
 #[async_trait]
 impl Actor for NodeManagerActor {
@@ -108,6 +109,7 @@ impl Actor for NodeManagerActor {
                 info!("Found {} other nodes.", nodes.len());
 
                 let mut keyspaces = Self::query_keyspaces(&mut nodes).await?;
+                own.update_index(keyspaces.clone());
                 keyspaces = Self::sort_actors_by_keyspace(keyspaces).await;
 
                 // Adopt half of the largest keyspace managed by another node
@@ -124,12 +126,6 @@ impl Actor for NodeManagerActor {
                         call!(actor_ref, AdoptKeyspace, r2).expect("Failed to adopt keyspace");
                     let keyspace = map.range.clone();
                     own.keyspace = keyspace.clone();
-
-                    // Only for testing. TODO: remove
-                    debug!("We now manage the following key-value-pairs:");
-                    for (key, value) in map.map.clone() {
-                        debug!(" - {}:{}", key, value);
-                    }
 
                     own.db_actors = Self::spawn_db_actors(
                         DBActorArgs {
@@ -185,7 +181,8 @@ impl Actor for NodeManagerActor {
                 );
 
                 assert_ne!(keyspace, own.keyspace); // Don't give up whole keyspace.
-                                                    // Keyspace must be at one end of our keyspace
+
+                // Keyspace must be at one end of our keyspace
                 assert!(
                     (keyspace.start == own.keyspace.start && keyspace.end < own.keyspace.end)
                         || (keyspace.start > own.keyspace.start
@@ -206,7 +203,6 @@ impl Actor for NodeManagerActor {
                     if actor_keyspace.start >= keyspace.start && actor_keyspace.end <= keyspace.end
                     {
                         // ""Kill"" actor and fetch HashMap
-                        // TODO: Currently the actor is not stopped
                         info!(
                             "'Killing' actor {:?} for keyspace {:#?}",
                             actor, actor_keyspace
@@ -235,6 +231,15 @@ impl Actor for NodeManagerActor {
                     own.db_actors.remove(&ks);
                 }
 
+                if (keyspace.start == own.keyspace.start && keyspace.end < own.keyspace.end) {
+                    own.keyspace.start = keyspace.end;
+                } else if (keyspace.start > own.keyspace.start && keyspace.end == own.keyspace.end)
+                {
+                    own.keyspace.end = keyspace.start;
+                } else {
+                    panic!("Requested keyspace is not at one end of our keyspace.")
+                }
+
                 reply.send(return_map)?;
             }
             QueryNodes(reply) => {
@@ -248,6 +253,15 @@ impl Actor for NodeManagerActor {
                 }
 
                 reply.send(ret)?;
+            }
+            Responsible(hash, reply) => reply.send(own.keyspace.contains(&hash))?,
+            Forward(request) => {
+                let responsible = own.find_responsible_by_request(&request.request);
+                if let Some(actor) = responsible {
+                    actor.send_message(DBMessage::Request(request))?
+                } else {
+                    error!("Unable to forward request to the correct actor")
+                }
             }
         }
         Ok(())

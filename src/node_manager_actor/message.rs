@@ -17,4 +17,6 @@ pub enum NodeManagerMessage {
     #[rpc]
     Responsible(u64, RpcReplyPort<bool>),
     Forward(DBRequest),
+    #[rpc]
+    QueryAddress(RpcReplyPort<String>),
 }

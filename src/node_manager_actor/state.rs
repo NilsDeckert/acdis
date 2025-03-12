@@ -23,12 +23,15 @@ pub struct NodeManageActorState {
 
 impl NodeManageActorState {
     /// Given a list of (ActorRef, Keyspace) Tuples, add them to HashMap of other NodeManagers
-    pub(crate) fn update_index(&mut self, actors: Vec<(ActorRef<NodeManagerMessage>, Range<u64>)>) {
+    pub(crate) fn update_index(
+        &mut self,
+        actors: Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>,
+    ) {
         for (actor, keyspace) in actors {
             self.other_nodes.insert(
                 keyspace,
                 NodeManagerRef {
-                    actor,
+                    actor: actor.clone(),
                     host: String::from(""),
                 },
             );

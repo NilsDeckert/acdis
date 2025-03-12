@@ -107,8 +107,12 @@ impl Actor for NodeManagerActor {
 
                 let mut nodes = pg::get_members(&pg_name);
                 info!("Found {} other nodes.", nodes.len());
+                let actor_refs = nodes
+                    .into_iter()
+                    .map(|cell| ActorRef::<NodeManagerMessage>::from(cell))
+                    .collect();
 
-                let mut keyspaces = Self::query_keyspaces(&mut nodes).await?;
+                let mut keyspaces = Self::query_keyspaces(&actor_refs).await?;
                 own.update_index(keyspaces.clone());
                 keyspaces = Self::sort_actors_by_keyspace(keyspaces).await;
 
@@ -263,6 +267,7 @@ impl Actor for NodeManagerActor {
                     error!("Unable to forward request to the correct actor")
                 }
             }
+            QueryAddress(reply) => reply.send(String::from("localhost:3789"))?,
         }
         Ok(())
     }

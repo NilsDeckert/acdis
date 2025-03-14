@@ -2,7 +2,9 @@ use crate::tcp_reader_actor::tcp_reader::TcpReaderActor;
 use crate::tcp_writer_actor::tcp_writer::TcpWriterActor;
 use log::{debug, error, info};
 use ractor::SupervisionEvent::*;
-use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
+use ractor::{
+    async_trait, cast, Actor, ActorProcessingErr, ActorRef, RpcReplyPort, SupervisionEvent,
+};
 use ractor_cluster::RactorMessage;
 use std::io::ErrorKind::AddrInUse;
 use std::process::exit;
@@ -13,11 +15,20 @@ pub struct TcpListenerActor;
 struct CompanionActor;
 
 #[derive(RactorMessage)]
-pub struct TcpConnectionMessage {
-    pub tcp_stream: tokio::net::TcpStream,
-    pub socket_addr: core::net::SocketAddr,
+pub enum TcpConnectionMessage {
+    /// Notify the ListenerActor about a new incoming connection
+    NewConnection {
+        tcp_stream: tokio::net::TcpStream,
+        socket_addr: core::net::SocketAddr,
+    },
+    /// Ask which address the TCP port uses
+    QueryAddress(RpcReplyPort<String>),
 }
 
+/// Extra actor to avoid blocking the [`TcpListenerActor`]s message handling
+/// with an infinite loop.
+/// This companion actor will wait for a new incoming connection and then notify the [`TcpListenerActor`]
+/// with A [`TcpConnectionMessage::NewConnection`]
 #[async_trait]
 impl Actor for CompanionActor {
     type Msg = ();
@@ -44,7 +55,7 @@ impl Actor for CompanionActor {
             info!("Accepting connection from: {}", socket_addr);
             cast!(
                 send_to,
-                TcpConnectionMessage {
+                TcpConnectionMessage::NewConnection {
                     tcp_stream,
                     socket_addr
                 }
@@ -56,7 +67,7 @@ impl Actor for CompanionActor {
 #[async_trait]
 impl Actor for TcpListenerActor {
     type Msg = TcpConnectionMessage;
-    type State = ();
+    type State = String;
     type Arguments = String;
 
     async fn pre_start(
@@ -65,12 +76,12 @@ impl Actor for TcpListenerActor {
         address: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         /* Open TCP port to accept connections */
-        info!("Listening on {}", address);
         let res = TcpListener::bind(address).await;
 
         match res {
             Ok(l) => {
                 let listener = l;
+                let address = listener.local_addr()?;
 
                 // Spawn an actor that polls the TcpListener for available connections
                 Actor::spawn_linked(
@@ -82,7 +93,8 @@ impl Actor for TcpListenerActor {
                 .await
                 .expect("Failed to spawn TCP poller");
 
-                Ok(())
+                info!("Listening on {}", &address);
+                Ok(address.to_string())
             }
             Err(e) => {
                 if e.kind() == AddrInUse {
@@ -98,40 +110,45 @@ impl Actor for TcpListenerActor {
     async fn handle(
         &self,
         myself: ActorRef<Self::Msg>,
-        connection: Self::Msg,
-        _state: &mut Self::State,
+        msg: Self::Msg,
+        address: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         debug!("Received Message");
-        let TcpConnectionMessage {
-            tcp_stream,
-            socket_addr,
-        } = connection;
+        match msg {
+            TcpConnectionMessage::NewConnection {
+                tcp_stream,
+                socket_addr,
+            } => {
+                // Split stream into reader and writer to allow for concurrent reading and writing
+                let (reader, writer) = tcp_stream.into_split();
 
-        // Split stream into reader and writer to allow for concurrent reading and writing
-        let (reader, writer) = tcp_stream.into_split();
+                let (write_actor, _write_actor_handle) = Actor::spawn_linked(
+                    Some(format!("Stream Writer {}", socket_addr)),
+                    TcpWriterActor,
+                    writer,
+                    myself.get_cell(),
+                )
+                .await?;
 
-        let (write_actor, _write_actor_handle) = Actor::spawn_linked(
-            Some(format!("Stream Writer {}", socket_addr)),
-            TcpWriterActor,
-            writer,
-            myself.get_cell(),
-        )
-        .await?;
+                // Clients usually keep their connections open. This means the spawned connection handler
+                // is alive and working until the client disconnects. -> It is okay to spawn a fresh actor
+                // for each client connection.
+                let (read_actor, _read_actor_handle) = Actor::spawn_linked(
+                    Some(format!("Stream Reader {}", socket_addr)),
+                    TcpReaderActor,
+                    (reader, write_actor.clone()),
+                    myself.get_cell(),
+                )
+                .await?;
 
-        // Clients usually keep their connections open. This means the spawned connection handler
-        // is alive and working until the client disconnects. -> It is okay to spawn a fresh actor
-        // for each client connection.
-        let (read_actor, _read_actor_handle) = Actor::spawn_linked(
-            Some(format!("Stream Reader {}", socket_addr)),
-            TcpReaderActor,
-            (reader, write_actor.clone()),
-            myself.get_cell(),
-        )
-        .await?;
-
-        // Let the read_actor supervise the write actor. This simplifies stopping the write_actor
-        // when the stream is closed.
-        write_actor.link(read_actor.get_cell());
+                // Let the read_actor supervise the write actor. This simplifies stopping the write_actor
+                // when the stream is closed.
+                write_actor.link(read_actor.get_cell());
+            }
+            TcpConnectionMessage::QueryAddress(reply) => {
+                reply.send(address.clone())?;
+            }
+        }
 
         Ok(())
     }

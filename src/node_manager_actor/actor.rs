@@ -2,14 +2,16 @@ use log::info;
 use std::collections::HashMap;
 use std::ops::Range;
 
+use ractor::{call, Actor, ActorProcessingErr, ActorRef};
+use ractor_cluster::node::NodeConnectionMode;
+use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
+
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::message::DBMessage;
 use crate::node_manager_actor::message::NodeManagerMessage;
-use ractor::{Actor, ActorRef};
-use ractor_cluster::node::NodeConnectionMode;
-use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
+use crate::tcp_listener_actor::tcp_listener::{TcpConnectionMessage, TcpListenerActor};
 
 pub struct NodeManagerActor;
 
@@ -41,6 +43,31 @@ impl NodeManagerActor {
         pmd_ref
     }
 
+    /// Open a TCP Port to accept redis requests by spawning a [`TcpListenerActor`].
+    ///
+    /// # Environment Variables
+    ///  * REDIS_HOST: Defaults to `0.0.0.0`
+    ///  * REDIS_PORT: For [`NodeType::Server`] this defaults to `6379`, otherwise to `0`.
+    ///
+    /// # Returns
+    ///  The address that the TCP port was assigned.
+    ///  In most cases this is `REDIS_HOST:REDIS_PORT` but differs if `REDIS_PORT` is `0`
+    pub(crate) async fn spawn_redis_access_point() -> Result<String, ActorProcessingErr> {
+        let host = std::env::var("REDIS_HOST").unwrap_or(String::from("0.0.0.0"));
+        let port = std::env::var("REDIS_PORT").unwrap_or(String::from("0"));
+
+        let (tcp_actor, _tcp_handler) = Actor::spawn(
+            Some(String::from("TcpListenerActor")),
+            TcpListenerActor,
+            format!("{}:{}", host, port),
+        )
+        .await
+        .expect("Failed to spawn tcp listener actor");
+
+        let address = call!(tcp_actor, TcpConnectionMessage::QueryAddress);
+        Ok(address?)
+    }
+
     /// Spawn and link DB actors
     ///
     /// # Arguments
@@ -50,7 +77,7 @@ impl NodeManagerActor {
     ///  * actors_to_join: Number of [`DBActor`] that will be spawned
     ///  * supervisor: [`NodeManagerActor`] that the db_actors will be linked to. Usually the caller.
     ///
-    /// # Return
+    /// # Returns
     /// Returns a HashMap that maps a Range (Keyspace) to a responsible actor
     pub(crate) async fn spawn_db_actors(
         args: DBActorArgs,

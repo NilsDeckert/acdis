@@ -41,6 +41,11 @@ impl Actor for NodeManagerActor {
             NodeType::Server => {
                 port = cluster_host_port;
                 name = String::from("host_node");
+
+                // Use default redis port if nothing else was specified via env variables
+                if let Err(_) = std::env::var("REDIS_PORT") {
+                    std::env::set_var("REDIS_PORT", "6379")
+                }
             }
             NodeType::Client => {
                 let mut rng = rand::thread_rng();
@@ -76,6 +81,8 @@ impl Actor for NodeManagerActor {
             }
         }
 
+        let redis_host = Self::spawn_redis_access_point().await?;
+
         myself.send_message(Init)?;
 
         Ok(NodeManageActorState {
@@ -83,6 +90,7 @@ impl Actor for NodeManagerActor {
             db_actors: HashMap::new(),
             node_server: pmd_ref,
             other_nodes: HashMap::new(),
+            redis_host,
         })
     }
 
@@ -105,7 +113,7 @@ impl Actor for NodeManagerActor {
                 debug!("Received init message");
                 let pg_name = String::from("acdis_node_managers");
 
-                let mut nodes = pg::get_members(&pg_name);
+                let nodes = pg::get_members(&pg_name);
                 info!("Found {} other nodes.", nodes.len());
                 let actor_refs = nodes
                     .into_iter()
@@ -113,11 +121,12 @@ impl Actor for NodeManagerActor {
                     .collect();
 
                 let mut keyspaces = Self::query_keyspaces(&actor_refs).await?;
-                own.update_index(keyspaces.clone());
                 keyspaces = Self::sort_actors_by_keyspace(keyspaces).await;
 
+                let addresses = Self::query(&actor_refs, QueryAddress, None);
+
                 // Adopt half of the largest keyspace managed by another node
-                if let Some((actor_ref, keyspace)) = keyspaces.into_iter().next() {
+                if let Some((actor_ref, keyspace)) = keyspaces.clone().into_iter().next() {
                     // Link to other node
                     myself.get_cell().link(actor_ref.get_cell());
 
@@ -151,6 +160,14 @@ impl Actor for NodeManagerActor {
                         myself.clone(),
                     )
                     .await;
+                }
+
+                let merged = own.merge_vec(keyspaces, addresses.await?);
+                own.update_index(merged);
+
+                // TODO: Remove
+                for (keyspace, info) in &own.other_nodes {
+                    println!("- {:#018x}..{:#018x}: {info}", keyspace.start, keyspace.end)
                 }
 
                 // Join later to avoid sending messages to ourselves
@@ -267,7 +284,7 @@ impl Actor for NodeManagerActor {
                     error!("Unable to forward request to the correct actor")
                 }
             }
-            QueryAddress(reply) => reply.send(String::from("localhost:3789"))?,
+            QueryAddress(reply) => reply.send(own.redis_host.clone())?,
         }
         Ok(())
     }

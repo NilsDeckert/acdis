@@ -43,7 +43,7 @@ fn setup_logging() {
 async fn main() {
     setup_logging();
 
-    let (_manager_ref, _manager_handler) = Actor::spawn(
+    let (_manager_ref, manager_handler) = Actor::spawn(
         Some(String::from("NodeManager")),
         NodeManagerActor,
         NodeType::Server,
@@ -51,13 +51,5 @@ async fn main() {
     .await
     .expect("Failed to spawn node manager");
 
-    let (_tcp_actor, tcp_handler) = Actor::spawn(
-        Some(String::from("TcpListenerActor")),
-        TcpListenerActor,
-        String::from("0.0.0.0:6379"),
-    )
-    .await
-    .expect("Failed to spawn tcp listener actor");
-
-    tcp_handler.await.unwrap();
+    manager_handler.await.expect("Failed to join node manager");
 }

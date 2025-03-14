@@ -44,7 +44,8 @@ async fn main() {
     setup_logging();
 
     let (manager_ref, manager_handler) = Actor::spawn(
-        Some(String::from("ClusterNodeManager")),
+        //Some(String::from("ClusterNodeManager")), // Same name leads to problems
+        None,
         NodeManagerActor,
         NodeType::Client,
     )

@@ -3,7 +3,7 @@ use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
 use log::error;
-use ractor::ActorRef;
+use ractor::{ActorProcessingErr, ActorRef};
 use ractor_cluster::NodeServerMessage;
 use redis_protocol_bridge::commands::parse::Request;
 use std::collections::HashMap;
@@ -19,23 +19,41 @@ pub struct NodeManageActorState {
     pub node_server: ActorRef<NodeServerMessage>,
     /// The other NodeManagers in this cluster, identified by their keyspace
     pub other_nodes: HashMap<Range<u64>, NodeManagerRef>,
+    /// The port that accepts redis requests
+    pub redis_host: String,
 }
 
 impl NodeManageActorState {
     /// Given a list of (ActorRef, Keyspace) Tuples, add them to HashMap of other NodeManagers
     pub(crate) fn update_index(
         &mut self,
-        actors: Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>,
+        actors: Vec<(&ActorRef<NodeManagerMessage>, Range<u64>, String)>,
     ) {
-        for (actor, keyspace) in actors {
+        for (actor, keyspace, address) in actors {
             self.other_nodes.insert(
                 keyspace,
                 NodeManagerRef {
                     actor: actor.clone(),
-                    host: String::from(""),
+                    host: address,
                 },
             );
         }
+    }
+
+    pub(crate) fn merge_vec<'a>(
+        &mut self,
+        keyspaces: Vec<(&'a ActorRef<NodeManagerMessage>, Range<u64>)>,
+        addresses: Vec<(&ActorRef<NodeManagerMessage>, String)>,
+    ) -> Vec<(&'a ActorRef<NodeManagerMessage>, Range<u64>, String)> {
+        let zip = keyspaces.into_iter().zip(addresses);
+        zip.map(|t| {
+            let (k, a) = t;
+            let actor_ref = k.0;
+            let keyspace = k.1;
+            let addr = a.1;
+            (actor_ref, keyspace, addr)
+        })
+        .collect()
     }
 
     /// Find the Actor that is responsible for the given hash.

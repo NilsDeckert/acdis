@@ -53,6 +53,8 @@ impl NodeEventSubscription for Subscription {
 
     fn node_session_ready(&self, ses: NodeServerSessionInformation) {
         info!("Session ready: {:?}@{}", ses.peer_name, ses.peer_addr);
+        
+        // TODO: update self.other_nodes with managed keyspace
         // info!("Session ready: \n\
         //     node_id:    {:#?} \n\
         //     peer_addr:  {:#?} \n\

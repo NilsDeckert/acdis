@@ -9,14 +9,9 @@ pub mod message;
 mod state;
 mod subscription;
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct NodeManagerRef {
-    pub actor: ActorRef<NodeManagerMessage>,
+    //pub actor: ActorRef<NodeManagerMessage>,
     pub host: String,
-}
-
-impl Display for NodeManagerRef {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}: {}", self.actor.get_id(), self.host)
-    }
 }

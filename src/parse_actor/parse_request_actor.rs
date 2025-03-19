@@ -2,7 +2,7 @@ use crate::db_actor::message::{DBMessage, DBRequest};
 use crate::db_actor::AHasher;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
-use log::{debug, error, warn};
+use log::{debug, error, info, warn};
 use ractor::{async_trait, call, cast, pg, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
@@ -59,8 +59,16 @@ impl Actor for ParseRequestActor {
             }
 
             Ok(request) => {
-                let responsible = self.find_responsible(&request).await?;
-                debug!("Request: {:?}", request);
+                // let responsible = self.find_responsible(&request).await?;
+                // TODO: Ensure that we send requests to our own node manager
+                let resp = pg::get_local_members(&String::from("acdis_node_managers")).into_iter().next().unwrap();
+                let responsible = ActorRef::from(resp);
+                info!("Request: {:?}", request);
+                
+                if let Request::SET {key, .. } = &request {
+                    let hash = ParseRequestActor::hash(&key);
+                    info!("{:#018x}", hash);
+                }
 
                 cast!(
                     responsible,
@@ -132,6 +140,7 @@ impl ParseRequestActor {
             Request::GET { key } | Request::SET { key, .. } => {
                 let hash = ParseRequestActor::hash(key);
                 debug!("Hash: {:#018x}", hash);
+                
                 for member in members {
                     let actor_ref = ActorRef::<NodeManagerMessage>::from(member);
 
@@ -183,5 +192,13 @@ impl ParseRequestActor {
         let mut hasher = AHasher::default();
         hasher.write(key.as_bytes());
         hasher.finish()
+    }
+    
+    /// Return the crc16 of the given key.
+    /// 
+    /// In redis cluster, the crc16 is used to determine the associated hash slot.
+    /// Each cluster node is responsible for a subset of the 16384 hash slots.
+    pub(crate) fn crc16(key: &String) -> u16 {
+        crc16::State::<crc16::XMODEM>::calculate(key.as_bytes())
     }
 }

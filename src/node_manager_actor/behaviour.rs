@@ -1,17 +1,19 @@
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
-use rand::Rng;
 use std::collections::HashMap;
-
+use std::ops::Range;
 use ractor::SupervisionEvent::*;
 use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor_cluster::NodeServerMessage::GetSessions;
-
+use rand::Rng;
+use redis_protocol::resp3::types::OwnedFrame;
+use redis_protocol_bridge::util::convert::SerializableFrame;
 use crate::db_actor::actor::{DBActorArgs, PartitionedHashMap};
 use crate::db_actor::message::DBMessage;
 use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::*;
+use crate::node_manager_actor::NodeManagerRef;
 use crate::node_manager_actor::state::NodeManageActorState;
 
 #[async_trait]
@@ -126,17 +128,17 @@ impl Actor for NodeManagerActor {
                 let addresses = Self::query(&actor_refs, QueryAddress, None);
 
                 // Adopt half of the largest keyspace managed by another node
-                if let Some((actor_ref, keyspace)) = keyspaces.clone().into_iter().next() {
+                if let Some((donor, keyspace)) = keyspaces.clone().into_iter().next() {
                     // Link to other node
-                    myself.get_cell().link(actor_ref.get_cell());
+                    myself.get_cell().link(donor.get_cell());
 
                     info!("Other NodeManagers present, attempting to adopt keyspace");
-                    let (_, r2) = Self::halve_range(keyspace);
+                    let (remaining, requesting) = Self::halve_range(keyspace);
 
                     // Inherit keys&values in that keyspace
                     // TODO: if inheriting fails, maybe try next node
                     let map =
-                        call!(actor_ref, AdoptKeyspace, r2).expect("Failed to adopt keyspace");
+                        call!(donor, AdoptKeyspace, requesting).expect("Failed to adopt keyspace");
                     let keyspace = map.range.clone();
                     own.keyspace = keyspace.clone();
 
@@ -149,6 +151,16 @@ impl Actor for NodeManagerActor {
                         myself.clone(),
                     )
                     .await;
+
+                    // Update keyspace of donor
+                    for (actor, keyspace) in &mut keyspaces {
+                        if actor.get_id() == donor.get_id() {
+                            keyspace.start = remaining.start;
+                            keyspace.end = remaining.end;
+                            break
+                        }
+                    }
+
                 } else {
                     info!("Could not find any other NodeManager");
                     own.db_actors = Self::spawn_db_actors(
@@ -162,13 +174,20 @@ impl Actor for NodeManagerActor {
                     .await;
                 }
 
-                let merged = own.merge_vec(keyspaces, addresses.await?);
+                let merged = own.merge_vec(&keyspaces, &addresses.await?);
                 own.update_index(merged);
 
                 // TODO: Remove
                 for (keyspace, info) in &own.other_nodes {
-                    println!("- {:#018x}..{:#018x}: {info}", keyspace.start, keyspace.end)
+                    println!("- {:#018x}..{:#018x}: {:#?}", keyspace.start, keyspace.end, info)
                 }
+
+                // Inform other nodes about our initial keyspace
+                self.send_index_update(
+                    myself.clone(),
+                    own.keyspace.clone(),
+                    NodeManagerRef{host: own.redis_host.clone()}
+                )?;
 
                 // Join later to avoid sending messages to ourselves
                 pg::join(pg_name.clone(), vec![myself.get_cell()]);
@@ -261,6 +280,13 @@ impl Actor for NodeManagerActor {
                     panic!("Requested keyspace is not at one end of our keyspace.")
                 }
 
+                // Inform other nodes that our keyspace has changed
+                self.send_index_update(
+                    myself,
+                    own.keyspace.clone(),
+                    NodeManagerRef{host: own.redis_host.clone()}
+                )?;
+
                 reply.send(return_map)?;
             }
             QueryNodes(reply) => {
@@ -277,14 +303,35 @@ impl Actor for NodeManagerActor {
             }
             Responsible(hash, reply) => reply.send(own.keyspace.contains(&hash))?,
             Forward(request) => {
+                // info!("Manager received: {:#?}", request.request);
+                
                 let responsible = own.find_responsible_by_request(&request.request);
                 if let Some(actor) = responsible {
                     actor.send_message(DBMessage::Request(request))?
                 } else {
-                    error!("Unable to forward request to the correct actor")
+                    info!("We are not responsible!");
+                    let tcp_writer = pg::get_members(&request.reply_to);
+                    let moved_error = own.moved_error(&request.request)?;
+                    
+                    if let Some(tcp_writer) = tcp_writer.first() {
+                        tcp_writer.send_message(
+                            SerializableFrame(
+                                OwnedFrame::SimpleError {
+                                    data: moved_error,
+                                    attributes: None
+                                }
+                            )
+                        )?
+                    } else {
+                        error!("Could not find tcp_writer for address {}", &request.reply_to)
+                    }
                 }
             }
             QueryAddress(reply) => reply.send(own.redis_host.clone())?,
+            IndexUpdate(keyspace, node_manager_ref) => {
+                info!("Actor {} updated keyspace to {:#018x}..{:#018x}", node_manager_ref.host, keyspace.start, keyspace.end);
+                own.update_index(vec!((keyspace, node_manager_ref)))
+            }
         }
         Ok(())
     }

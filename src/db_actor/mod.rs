@@ -13,6 +13,7 @@ pub mod map_entry;
 /// This module contains the code to the [`actor::DBActor`]:
 /// Its message handling and its operations on the HashMap
 pub mod actor;
+mod command_handler;
 
 /// The common hasher
 // pub type AHasher = FxHasher;

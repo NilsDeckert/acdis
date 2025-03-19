@@ -1,16 +1,18 @@
-use crate::db_actor::map_entry::MapEntry;
-use crate::db_actor::message::DBMessage;
-use crate::db_actor::{AHasher, HashMap};
 use log::{debug, info, warn};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
-use redis_protocol::error::RedisProtocolError;
+use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
-use redis_protocol_bridge::commands::{command, hello, info, ping, select};
+use redis_protocol_bridge::commands::{command, hello, info, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 use serde::{Deserialize, Serialize};
 use std::hash::Hasher;
 use std::ops::Range;
+use crate::parse_actor::parse_request_actor::ParseRequestActor;
+use crate::db_actor::map_entry::MapEntry;
+use crate::db_actor::message::DBMessage;
+use crate::db_actor::{AHasher, HashMap};
+use crate::db_actor::command_handler::handle_info;
 
 pub struct DBActor;
 
@@ -22,10 +24,7 @@ pub struct PartitionedHashMap {
 
 impl PartitionedHashMap {
     pub fn in_range(&self, key: &String) -> bool {
-        //let mut hasher = DefaultHasher::new();
-        let mut hasher = AHasher::default();
-        hasher.write(key.as_bytes());
-        let hash = hasher.finish();
+        let hash = ParseRequestActor::hash(key);
 
         if self.range.contains(&hash) {
             true
@@ -95,24 +94,41 @@ impl Actor for DBActor {
             DBMessage::Request(req) => {
                 debug!("Received request");
                 debug!("{:?}", req.request);
-                let reply = self.handle_request(req.request, map);
+                let reply = self.handle_request(req.request.clone(), map);
+
+                let reply_to_vec = ractor::pg::get_members(&req.reply_to);
+                assert_eq!(
+                    reply_to_vec.len(), 1,
+                    "Found less than or more than one actors for {}",
+                    req.reply_to
+                );
+                let reply_to = reply_to_vec.into_iter().next().unwrap();
+                debug!("Replying to: {:?}", reply_to);
 
                 match reply {
                     Ok(frame) => {
-                        let reply_to_vec = ractor::pg::get_members(&req.reply_to);
-                        assert_eq!(
-                            reply_to_vec.len(),
-                            1,
-                            "Found less than or more than one actors for {}",
-                            req.reply_to
-                        );
-                        let reply_to = reply_to_vec.into_iter().next().unwrap();
-                        debug!("Replying to: {:?}", reply_to);
-
-                        Ok(reply_to.send_message(SerializableFrame(frame))?)
+                        if let Request::QUIT = req.request {
+                            reply_to.send_message(SerializableFrame(frame))?;
+                            let supervisor = reply_to.try_get_supervisor();
+                            if let Some(supervisor) = supervisor {
+                                supervisor.stop(Some(String::from("Client sent QUIT")));
+                            }
+                            Ok(())
+                        } else {
+                            Ok(reply_to.send_message(SerializableFrame(frame))?)
+                        }
                     }
 
-                    Err(err) => Err(ActorProcessingErr::from(err)),
+                    Err(err) => {
+                        match err.kind() {
+                            RedisProtocolErrorKind::Parse => {
+                                Ok(reply_to.send_message(
+                                    SerializableFrame(err.as_frame())
+                                )?)
+                            }
+                            _ => Err(ActorProcessingErr::from(err)),
+                        }
+                    },
                 }
             }
             DBMessage::Drain(reply) => {
@@ -141,9 +157,10 @@ impl DBActor {
             /* Mock reply using default handlers. TODO */
             Request::HELLO { .. } => hello::default_handle(request),
             Request::COMMAND { .. } => command::default_handle(request),
-            Request::INFO { .. } => info::default_handle(request),
+            Request::INFO(info) => handle_info(info),
             Request::PING { .. } => ping::default_handle(request),
             Request::SELECT { .. } => select::default_handle(request),
+            Request::QUIT { .. } => quit::default_handle(request),
         }
     }
 

@@ -2,7 +2,7 @@ use crate::db_actor::message::{DBMessage, DBRequest};
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
-use log::error;
+use log::{error, info};
 use ractor::{ActorProcessingErr, ActorRef};
 use ractor_cluster::NodeServerMessage;
 use redis_protocol_bridge::commands::parse::Request;
@@ -24,34 +24,32 @@ pub struct NodeManageActorState {
 }
 
 impl NodeManageActorState {
-    /// Given a list of (ActorRef, Keyspace) Tuples, add them to HashMap of other NodeManagers
+    /// Given a list of (ActorRef, Keyspace, Address) Tuples, add them to HashMap of other NodeManagers
     pub(crate) fn update_index(
         &mut self,
-        actors: Vec<(&ActorRef<NodeManagerMessage>, Range<u64>, String)>,
+        actors: Vec<(Range<u64>, NodeManagerRef)>,
     ) {
-        for (actor, keyspace, address) in actors {
+        for (keyspace, node_manager_ref) in actors {
             self.other_nodes.insert(
                 keyspace,
-                NodeManagerRef {
-                    actor: actor.clone(),
-                    host: address,
-                },
+                node_manager_ref
             );
         }
     }
 
-    pub(crate) fn merge_vec<'a>(
+    pub(crate) fn merge_vec(
         &mut self,
-        keyspaces: Vec<(&'a ActorRef<NodeManagerMessage>, Range<u64>)>,
-        addresses: Vec<(&ActorRef<NodeManagerMessage>, String)>,
-    ) -> Vec<(&'a ActorRef<NodeManagerMessage>, Range<u64>, String)> {
+        keyspaces: &Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>,
+        addresses: &Vec<(&ActorRef<NodeManagerMessage>, String)>,
+    ) -> Vec<(Range<u64>, NodeManagerRef)> {
         let zip = keyspaces.into_iter().zip(addresses);
         zip.map(|t| {
             let (k, a) = t;
-            let actor_ref = k.0;
-            let keyspace = k.1;
-            let addr = a.1;
-            (actor_ref, keyspace, addr)
+            let keyspace = k.1.clone();
+            let node_manager_ref = NodeManagerRef{
+                host: a.1.clone()
+            };
+            (keyspace, node_manager_ref)
         })
         .collect()
     }
@@ -87,17 +85,79 @@ impl NodeManageActorState {
         }
         None
     }
-
+    
+    /// Given a request find the responsible [`DBActor`] on this node.
+    /// 
+    /// For requests with key, this is just a wrapper around [`self.find_responsible_by_hash`].
+    /// For others, it just returns the first actor in its list.
+    /// 
+    /// ## Return
+    ///  - `Some(ActorRef<DBMessage>)`
+    ///  - `None` if no actor on this node is responsible
     pub(crate) fn find_responsible_by_request(
         &self,
         request: &Request,
     ) -> Option<ActorRef<DBMessage>> {
         match request {
+            // Requests with key need hashing to find responsible
             Request::GET { key } | Request::SET { key, .. } => {
                 let hash = ParseRequestActor::hash(&key);
                 self.find_responsible_by_hash(&hash)
             }
+            // Doesn't matter who handles this, take first in list
             _ => self.db_actors.values().into_iter().next().cloned(),
+        }
+    }
+    
+    pub(crate) fn find_responsible_node_by_hash(
+        &self,
+        hash: &u64,
+    ) -> Option<NodeManagerRef> {
+        for (keyspace, actor) in &self.other_nodes {
+            if keyspace.contains(hash) {
+                return Some(actor.clone());
+            }
+        }
+        None
+    }
+    
+    pub(crate) fn find_responsible_node_by_request(
+        &self,
+        request: &Request,
+    ) -> Option<NodeManagerRef> {
+        match request {
+            Request::GET { key } | Request::SET { key, .. } => {
+                let hash = ParseRequestActor::hash(&key);
+                self.find_responsible_node_by_hash(&hash)
+            }
+            _ => self.other_nodes.values().into_iter().next().cloned(),
+        }
+    }
+    
+    pub(crate) fn moved_error(
+        &mut self,
+        request: &Request,
+    ) -> Result<String, ActorProcessingErr> {
+        match request {
+            Request::GET { key } | Request::SET { key, .. } => {
+                let hash = ParseRequestActor::hash(&key);
+                let responsible = self.find_responsible_node_by_hash(&hash);
+                if let Some(responsible) = responsible {
+                    let slot = ParseRequestActor::crc16(&key) % 16384;
+                    info!("MOVED {slot} {}", responsible.host);
+                    Ok(format!("MOVED {slot} {}", responsible.host))
+                } else {
+                    Err(ActorProcessingErr::from("Unable to find responsible node"))
+                }
+            }
+            _ => {
+                let next = self.other_nodes.values().into_iter().next();
+                if let Some(next) = next {
+                    Ok(format!("MOVED 0 {}", next.host))
+                } else {
+                    Err(ActorProcessingErr::from("No other node in cluster"))
+                }
+            }
         }
     }
 }

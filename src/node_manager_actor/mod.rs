@@ -5,8 +5,7 @@ pub mod message;
 mod state;
 mod subscription;
 
-#[derive(Debug, Clone, Eq, PartialEq)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NodeManagerRef {
     //pub actor: ActorRef<NodeManagerMessage>,
     pub host: String,

@@ -11,9 +11,9 @@ use redis_protocol_bridge::util::convert::SerializableFrame;
 pub struct ParseRequestMessage {
     pub frame: SerializableFrame,
     /// Name of the [`ractor::pg`] process group, whose actor should receive the response to this request.
-    /// 
+    ///
     /// In our case, this the [`tokio::net::tcp::OwnedWriteHalf::peer_addr`] of the connected
-    /// tcp stream, which identifies the [`crate::tcp_writer_actor::tcp_writer::TcpWriterActor`] 
+    /// tcp stream, which identifies the [`crate::tcp_writer_actor::tcp_writer::TcpWriterActor`]
     /// responsible for this connection.
     pub reply_to: String,
 }

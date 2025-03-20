@@ -107,7 +107,11 @@ impl Actor for TcpListenerActor {
         }
     }
 
-    async fn post_stop(&self, _myself: ActorRef<Self::Msg>, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn post_stop(
+        &self,
+        _myself: ActorRef<Self::Msg>,
+        _state: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
         info!("Stopping");
         Ok(())
     }

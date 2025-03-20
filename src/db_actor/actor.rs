@@ -1,3 +1,8 @@
+use crate::db_actor::command_handler::handle_info;
+use crate::db_actor::map_entry::MapEntry;
+use crate::db_actor::message::DBMessage;
+use crate::db_actor::HashMap;
+use crate::parse_actor::parse_request_actor::ParseRequestActor;
 use log::{debug, warn};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
@@ -7,11 +12,6 @@ use redis_protocol_bridge::commands::{command, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 use serde::{Deserialize, Serialize};
 use std::ops::Range;
-use crate::parse_actor::parse_request_actor::ParseRequestActor;
-use crate::db_actor::map_entry::MapEntry;
-use crate::db_actor::message::DBMessage;
-use crate::db_actor::HashMap;
-use crate::db_actor::command_handler::handle_info;
 
 pub struct DBActor;
 
@@ -97,7 +97,8 @@ impl Actor for DBActor {
 
                 let reply_to_vec = ractor::pg::get_members(&req.reply_to);
                 assert_eq!(
-                    reply_to_vec.len(), 1,
+                    reply_to_vec.len(),
+                    1,
                     "Found less than or more than one actors for {}",
                     req.reply_to
                 );
@@ -118,15 +119,11 @@ impl Actor for DBActor {
                         }
                     }
 
-                    Err(err) => {
-                        match err.kind() {
-                            RedisProtocolErrorKind::Parse => {
-                                Ok(reply_to.send_message(
-                                    SerializableFrame(err.as_frame())
-                                )?)
-                            }
-                            _ => Err(ActorProcessingErr::from(err)),
+                    Err(err) => match err.kind() {
+                        RedisProtocolErrorKind::Parse => {
+                            Ok(reply_to.send_message(SerializableFrame(err.as_frame()))?)
                         }
+                        _ => Err(ActorProcessingErr::from(err)),
                     },
                 }
             }

@@ -1,4 +1,4 @@
-use crate::db_actor::message::{DBMessage};
+use crate::db_actor::message::DBMessage;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
@@ -25,22 +25,13 @@ pub struct NodeManageActorState {
 
 impl NodeManageActorState {
     /// Given a list of (ActorRef, Keyspace, Address) Tuples, add them to HashMap of other NodeManagers
-    pub(crate) fn update_index(
-        &mut self,
-        actors: Vec<(Range<u64>, NodeManagerRef)>,
-    ) {
-        
+    pub(crate) fn update_index(&mut self, actors: Vec<(Range<u64>, NodeManagerRef)>) {
         // Delete all entries of nodes in the passed `actors`
-        let refs: Vec<NodeManagerRef> = actors.clone().into_iter().map(|(r,n)| n).collect();
-        self.other_nodes.retain(|_, value| {
-            !refs.contains(value)
-        });
-        
+        let refs: Vec<NodeManagerRef> = actors.clone().into_iter().map(|(r, n)| n).collect();
+        self.other_nodes.retain(|_, value| !refs.contains(value));
+
         for (keyspace, node_manager_ref) in actors {
-            self.other_nodes.insert(
-                keyspace,
-                node_manager_ref
-            );
+            self.other_nodes.insert(keyspace, node_manager_ref);
         }
     }
 
@@ -50,17 +41,21 @@ impl NodeManageActorState {
         addresses: &Vec<(&ActorRef<NodeManagerMessage>, String)>,
     ) -> Vec<(Range<u64>, NodeManagerRef)> {
         let mut merged: Vec<(Range<u64>, NodeManagerRef)> = Vec::with_capacity(keyspaces.len());
-        
+
         for keyspace in keyspaces {
             for addr in addresses {
                 if keyspace.0.get_id() == addr.0.get_id() {
-                    merged.push((keyspace.1.clone(), NodeManagerRef{host: addr.1.clone()}));
-                    continue
+                    merged.push((
+                        keyspace.1.clone(),
+                        NodeManagerRef {
+                            host: addr.1.clone(),
+                        },
+                    ));
+                    continue;
                 }
             }
         }
         merged
-        
     }
 
     /// Find the Actor that is responsible for the given hash.
@@ -94,12 +89,12 @@ impl NodeManageActorState {
         }
         None
     }
-    
+
     /// Given a request find the responsible [`DBActor`] on this node.
-    /// 
+    ///
     /// For requests with key, this is just a wrapper around [`self.find_responsible_by_hash`].
     /// For others, it just returns the first actor in its list.
-    /// 
+    ///
     /// ## Return
     ///  - `Some(ActorRef<DBMessage>)`
     ///  - `None` if no actor on this node is responsible
@@ -117,23 +112,24 @@ impl NodeManageActorState {
             _ => self.db_actors.values().into_iter().next().cloned(),
         }
     }
-    
-    pub(crate) fn find_responsible_node_by_hash(
-        &self,
-        hash: &u64,
-    ) -> Option<NodeManagerRef> {
+
+    pub(crate) fn find_responsible_node_by_hash(&self, hash: &u64) -> Option<NodeManagerRef> {
         for (keyspace, actor) in &self.other_nodes {
             if keyspace.contains(hash) {
-                info!("{}: {:#018x} contained in {:#018x}..{:#018x}",
-                actor.host, hash, keyspace.start, keyspace.end);
+                info!(
+                    "{}: {:#018x} contained in {:#018x}..{:#018x}",
+                    actor.host, hash, keyspace.start, keyspace.end
+                );
                 return Some(actor.clone());
             }
-            info!("{}: {:#018x} not in {:#018x}..{:#018x}",
-                actor.host, hash, keyspace.start, keyspace.end);
+            info!(
+                "{}: {:#018x} not in {:#018x}..{:#018x}",
+                actor.host, hash, keyspace.start, keyspace.end
+            );
         }
         None
     }
-    
+
     pub(crate) fn find_responsible_node_by_request(
         &self,
         request: &Request,
@@ -146,11 +142,8 @@ impl NodeManageActorState {
             _ => self.other_nodes.values().into_iter().next().cloned(),
         }
     }
-    
-    pub(crate) fn moved_error(
-        &mut self,
-        request: &Request,
-    ) -> Result<String, ActorProcessingErr> {
+
+    pub(crate) fn moved_error(&mut self, request: &Request) -> Result<String, ActorProcessingErr> {
         match request {
             Request::GET { key } | Request::SET { key, .. } => {
                 let hash = ParseRequestActor::hash(&key);

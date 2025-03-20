@@ -1,19 +1,19 @@
+use crate::db_actor::actor::{DBActorArgs, PartitionedHashMap};
+use crate::db_actor::message::DBMessage;
+use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
+use crate::node_manager_actor::message::NodeManagerMessage;
+use crate::node_manager_actor::message::NodeManagerMessage::*;
+use crate::node_manager_actor::state::NodeManageActorState;
+use crate::node_manager_actor::NodeManagerRef;
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
-use std::collections::HashMap;
 use ractor::SupervisionEvent::*;
 use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor_cluster::NodeServerMessage::GetSessions;
 use rand::Rng;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::util::convert::SerializableFrame;
-use crate::db_actor::actor::{DBActorArgs, PartitionedHashMap};
-use crate::db_actor::message::DBMessage;
-use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
-use crate::node_manager_actor::message::NodeManagerMessage;
-use crate::node_manager_actor::message::NodeManagerMessage::*;
-use crate::node_manager_actor::NodeManagerRef;
-use crate::node_manager_actor::state::NodeManageActorState;
+use std::collections::HashMap;
 
 #[async_trait]
 impl Actor for NodeManagerActor {
@@ -156,10 +156,9 @@ impl Actor for NodeManagerActor {
                         if actor.get_id() == donor.get_id() {
                             keyspace.start = remaining.start;
                             keyspace.end = remaining.end;
-                            break
+                            break;
                         }
                     }
-
                 } else {
                     info!("Could not find any other NodeManager");
                     own.db_actors = Self::spawn_db_actors(
@@ -178,14 +177,19 @@ impl Actor for NodeManagerActor {
 
                 // TODO: Remove
                 for (keyspace, info) in &own.other_nodes {
-                    println!("- {:#018x}..{:#018x}: {:#?}", keyspace.start, keyspace.end, info)
+                    println!(
+                        "- {:#018x}..{:#018x}: {:#?}",
+                        keyspace.start, keyspace.end, info
+                    )
                 }
 
                 // Inform other nodes about our initial keyspace
                 self.send_index_update(
                     myself.clone(),
                     own.keyspace.clone(),
-                    NodeManagerRef{host: own.redis_host.clone()}
+                    NodeManagerRef {
+                        host: own.redis_host.clone(),
+                    },
                 )?;
 
                 // Join later to avoid sending messages to ourselves
@@ -239,7 +243,8 @@ impl Actor for NodeManagerActor {
                 for (actor_keyspace, actor) in &own.db_actors {
                     // Keyspace of this actor is completely inside
                     // the requested keyspace
-                    if actor_keyspace.start >= requested.start && actor_keyspace.end <= requested.end
+                    if actor_keyspace.start >= requested.start
+                        && actor_keyspace.end <= requested.end
                     {
                         // ""Kill"" actor and fetch HashMap
                         info!(
@@ -260,7 +265,10 @@ impl Actor for NodeManagerActor {
                             "Did not cover this case:\n\
                         The keyspace of this actor ({:#018x}..{:#018x}) is not fully inside the \
                         requested keyspace ({:#018x}..{:#018x})",
-                            actor_keyspace.start, actor_keyspace.end, requested.start, requested.end
+                            actor_keyspace.start,
+                            actor_keyspace.end,
+                            requested.start,
+                            requested.end
                         )
                     }
                 }
@@ -283,14 +291,19 @@ impl Actor for NodeManagerActor {
                     // [=remaining=|==requested==|=remaining=]
                     panic!("Requested keyspace is not at one end of our keyspace.")
                 }
-                
-                info!("Our new keyspace: {:#018x}..{:#018x}", own.keyspace.start, own.keyspace.end);
+
+                info!(
+                    "Our new keyspace: {:#018x}..{:#018x}",
+                    own.keyspace.start, own.keyspace.end
+                );
 
                 // Inform other nodes that our keyspace has changed
                 self.send_index_update(
                     myself,
                     own.keyspace.clone(),
-                    NodeManagerRef{host: own.redis_host.clone()}
+                    NodeManagerRef {
+                        host: own.redis_host.clone(),
+                    },
                 )?;
 
                 reply.send(return_map)?;
@@ -310,7 +323,7 @@ impl Actor for NodeManagerActor {
             Responsible(hash, reply) => reply.send(own.keyspace.contains(&hash))?,
             Forward(request) => {
                 // info!("Manager received: {:#?}", request.request);
-                
+
                 let responsible = own.find_responsible_by_request(&request.request);
                 if let Some(actor) = responsible {
                     actor.send_message(DBMessage::Request(request))?
@@ -318,25 +331,27 @@ impl Actor for NodeManagerActor {
                     info!("We are not responsible!");
                     let tcp_writer = pg::get_members(&request.reply_to);
                     let moved_error = own.moved_error(&request.request)?;
-                    
+
                     if let Some(tcp_writer) = tcp_writer.first() {
-                        tcp_writer.send_message(
-                            SerializableFrame(
-                                OwnedFrame::SimpleError {
-                                    data: moved_error,
-                                    attributes: None
-                                }
-                            )
-                        )?
+                        tcp_writer.send_message(SerializableFrame(OwnedFrame::SimpleError {
+                            data: moved_error,
+                            attributes: None,
+                        }))?
                     } else {
-                        error!("Could not find tcp_writer for address {}", &request.reply_to)
+                        error!(
+                            "Could not find tcp_writer for address {}",
+                            &request.reply_to
+                        )
                     }
                 }
             }
             QueryAddress(reply) => reply.send(own.redis_host.clone())?,
             IndexUpdate(keyspace, node_manager_ref) => {
-                info!("Actor {} updated their keyspace to {:#018x}..{:#018x}", node_manager_ref.host, keyspace.start, keyspace.end);
-                own.update_index(vec!((keyspace, node_manager_ref)))
+                info!(
+                    "Actor {} updated their keyspace to {:#018x}..{:#018x}",
+                    node_manager_ref.host, keyspace.start, keyspace.end
+                );
+                own.update_index(vec![(keyspace, node_manager_ref)])
             }
         }
         Ok(())

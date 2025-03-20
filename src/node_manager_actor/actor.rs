@@ -1,9 +1,9 @@
 use log::info;
-use std::collections::HashMap;
-use std::ops::Range;
 use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef};
 use ractor_cluster::node::NodeConnectionMode;
 use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
+use std::collections::HashMap;
+use std::ops::Range;
 
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
@@ -170,25 +170,25 @@ impl NodeManagerActor {
             .unwrap();
         (cluster_host_address, cluster_host_port)
     }
-    
-pub(crate) fn send_index_update(
-    &self,
-    myself: ActorRef<NodeManagerMessage>,
-    keyspace: Range<u64>,
-    info: NodeManagerRef
-) -> Result<(), ActorProcessingErr> {
-    let others = pg::get_members(&String::from("acdis_node_managers"));
-    for node in others {
-        if myself.get_id() == node.get_id() {
-            continue
+
+    pub(crate) fn send_index_update(
+        &self,
+        myself: ActorRef<NodeManagerMessage>,
+        keyspace: Range<u64>,
+        info: NodeManagerRef,
+    ) -> Result<(), ActorProcessingErr> {
+        let others = pg::get_members(&String::from("acdis_node_managers"));
+        for node in others {
+            if myself.get_id() == node.get_id() {
+                continue;
+            }
+            node.send_message(NodeManagerMessage::IndexUpdate(
+                keyspace.clone(),
+                info.clone(),
+            ))?;
         }
-        node.send_message(NodeManagerMessage::IndexUpdate(
-            keyspace.clone(),
-            info.clone(),
-        ))?;
-    }
-    
-    Ok(())
+
+        Ok(())
     }
 }
 

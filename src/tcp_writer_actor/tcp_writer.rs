@@ -9,7 +9,7 @@ use tokio::net::tcp::OwnedWriteHalf;
 /// This actor handles the writing part of a [`tokio::net::TcpStream`].
 /// It is spawned with a [`OwnedWriteHalf`], receives [`OwnedFrame`]s, serializes them
 /// and writes the result to its stream.
-/// 
+///
 /// On spawn, it joins a [`ractor::pg`] process group with the name of the [`OwnedWriteHalf`]s peer_addr.
 /// This is used to write Resp3 Frames to the client by sending them to this actor.
 pub struct TcpWriterActor;
@@ -35,16 +35,21 @@ impl Actor for TcpWriterActor {
         Ok(write_half)
     }
 
-    async fn post_stop(&self, myself: ActorRef<Self::Msg>, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn post_stop(
+        &self,
+        myself: ActorRef<Self::Msg>,
+        _state: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
         info!("Stopping...");
         let supervisor = myself.try_get_supervisor();
         if let Some(supervisor) = supervisor {
             info!("Found supervisor");
-            supervisor.stop(Some(String::from("Write actor for this connection was stopped.")))
+            supervisor.stop(Some(String::from(
+                "Write actor for this connection was stopped.",
+            )))
         }
         Ok(())
     }
-
 
     async fn handle(
         &self,

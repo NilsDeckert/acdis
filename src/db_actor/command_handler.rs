@@ -1,36 +1,41 @@
-use redis_protocol::error::{RedisProtocolError};
+use redis_protocol::error::RedisProtocolError;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::info::Info;
 use redis_protocol_bridge::util::convert::AsFrame;
 
 pub(crate) fn handle_info(mut info: Info) -> Result<OwnedFrame, RedisProtocolError> {
     let mut ret = String::new();
-    
+
     if info.default {
-        info.server=true;
-        info.keyspace=true;
-        info.persistence=true;
+        info.server = true;
+        info.keyspace = true;
+        info.persistence = true;
     }
-    
+
     if info.server {
-        ret.push_str("\
+        ret.push_str(
+            "\
         # Server\r\n\
         redis_version:7.0.0\r\n\
         redis_git_sha1:00000000\r\n\
         redis_git_dirty:0\r\n\
         os:Linux\r\n\
-        ");
+        ",
+        );
     }
-    
+
     if info.keyspace {
-        ret.push_str("\
+        ret.push_str(
+            "\
         # Keyspace\r\n\
         db0:keys=0,expires=0,avg_ttl=0\r\n\
-        ");
+        ",
+        );
     }
-    
+
     if info.persistence {
-        ret.push_str("\
+        ret.push_str(
+            "\
         # Persistence\r\n\
         loading:0\r\n\
         async_loading:0\r\n\
@@ -50,9 +55,10 @@ pub(crate) fn handle_info(mut info: Info) -> Result<OwnedFrame, RedisProtocolErr
         aof_rewrites_consecutive_failures:0\r\n\
         aof_last_write_status:ok\r\n\
         aof_last_cow_size:0\r\n\
-        ")
+        ",
+        )
     }
-    
+
     Ok(ret.as_frame())
 
     // Ok(ret.as_frame())

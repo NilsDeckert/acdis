@@ -61,11 +61,14 @@ impl Actor for ParseRequestActor {
             Ok(request) => {
                 // let responsible = self.find_responsible(&request).await?;
                 // TODO: Ensure that we send requests to our own node manager
-                let resp = pg::get_local_members(&String::from("acdis_node_managers")).into_iter().next().unwrap();
+                let resp = pg::get_local_members(&String::from("acdis_node_managers"))
+                    .into_iter()
+                    .next()
+                    .unwrap();
                 let responsible = ActorRef::from(resp);
                 info!("Request: {:?}", request);
-                
-                if let Request::SET {key, .. } = &request {
+
+                if let Request::SET { key, .. } = &request {
                     let hash = ParseRequestActor::hash(&key);
                     info!("{:#018x}", hash);
                 }
@@ -140,7 +143,7 @@ impl ParseRequestActor {
             Request::GET { key } | Request::SET { key, .. } => {
                 let hash = ParseRequestActor::hash(key);
                 debug!("Hash: {:#018x}", hash);
-                
+
                 for member in members {
                     let actor_ref = ActorRef::<NodeManagerMessage>::from(member);
 
@@ -193,9 +196,9 @@ impl ParseRequestActor {
         hasher.write(key.as_bytes());
         hasher.finish()
     }
-    
+
     /// Return the crc16 of the given key.
-    /// 
+    ///
     /// In redis cluster, the crc16 is used to determine the associated hash slot.
     /// Each cluster node is responsible for a subset of the 16384 hash slots.
     pub(crate) fn crc16(key: &String) -> u16 {

@@ -1,9 +1,9 @@
+use crate::db_actor::actor::PartitionedHashMap;
+use crate::db_actor::message::DBRequest;
+use crate::node_manager_actor::NodeManagerRef;
 use ractor::RpcReplyPort;
 use ractor_cluster::RactorClusterMessage;
 use std::ops::Range;
-use crate::node_manager_actor::NodeManagerRef;
-use crate::db_actor::actor::PartitionedHashMap;
-use crate::db_actor::message::DBRequest;
 
 #[derive(RactorClusterMessage)]
 pub enum NodeManagerMessage {
@@ -20,5 +20,5 @@ pub enum NodeManagerMessage {
     Forward(DBRequest),
     #[rpc]
     QueryAddress(RpcReplyPort<String>),
-    IndexUpdate(Range<u64>, NodeManagerRef)
+    IndexUpdate(Range<u64>, NodeManagerRef),
 }

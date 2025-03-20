@@ -1,13 +1,10 @@
 use crate::node_manager_actor::actor::NodeManagerActor;
 use crate::node_manager_actor::message::NodeManagerMessage;
-use crate::node_manager_actor::message::NodeManagerMessage::{QueryAddress, QueryKeyspace};
-use futures::future::join_all;
+use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
 use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
-use ractor::{ActorCell, ActorProcessingErr, ActorRef, Message, RactorErr, RpcReplyPort};
-use std::any::Any;
+use ractor::{ActorProcessingErr, ActorRef, Message, RpcReplyPort};
 use std::ops::Range;
-use tokio::task::{JoinError, JoinHandle};
 
 impl NodeManagerActor {
     /// Given a range, split it and return both halves

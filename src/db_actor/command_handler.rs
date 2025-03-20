@@ -1,8 +1,7 @@
-use std::ops::Add;
-use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
-use redis_protocol::resp3::types::{FrameMap, OwnedFrame};
+use redis_protocol::error::{RedisProtocolError};
+use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::info::Info;
-use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
+use redis_protocol_bridge::util::convert::AsFrame;
 
 pub(crate) fn handle_info(mut info: Info) -> Result<OwnedFrame, RedisProtocolError> {
     let mut ret = String::new();

@@ -1,17 +1,16 @@
-use log::{debug, info, warn};
+use log::{debug, warn};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
-use redis_protocol_bridge::commands::{command, hello, info, ping, quit, select};
+use redis_protocol_bridge::commands::{command, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 use serde::{Deserialize, Serialize};
-use std::hash::Hasher;
 use std::ops::Range;
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
 use crate::db_actor::map_entry::MapEntry;
 use crate::db_actor::message::DBMessage;
-use crate::db_actor::{AHasher, HashMap};
+use crate::db_actor::HashMap;
 use crate::db_actor::command_handler::handle_info;
 
 pub struct DBActor;
@@ -60,7 +59,7 @@ impl Actor for DBActor {
         ractor::pg::join(group_name.to_owned(), vec![myself.get_cell()]);
 
         let members = ractor::pg::get_members(&group_name);
-        info!(
+        debug!(
             "We're one of {} actors in this cluster managing {:#018x}..{:#018x}",
             members.len(),
             args.range.start,

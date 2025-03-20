@@ -167,13 +167,13 @@ impl Actor for TcpListenerActor {
     ) -> Result<(), ActorProcessingErr> {
         match event {
             ActorStarted(cell) => {
-                info!(
+                debug!(
                     "{} started",
                     cell.get_name().unwrap_or(String::from("Actor"))
                 )
             }
             ActorTerminated(cell, _last_state, _reason) => {
-                info!(
+                debug!(
                     "{} stopped",
                     cell.get_name().unwrap_or(String::from("Actor"))
                 );

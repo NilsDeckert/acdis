@@ -35,7 +35,7 @@ impl Actor for TcpWriterActor {
         Ok(write_half)
     }
 
-    async fn post_stop(&self, myself: ActorRef<Self::Msg>, state: &mut Self::State) -> Result<(), ActorProcessingErr> {
+    async fn post_stop(&self, myself: ActorRef<Self::Msg>, _state: &mut Self::State) -> Result<(), ActorProcessingErr> {
         info!("Stopping...");
         let supervisor = myself.try_get_supervisor();
         if let Some(supervisor) = supervisor {

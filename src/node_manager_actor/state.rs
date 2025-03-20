@@ -1,4 +1,4 @@
-use crate::db_actor::message::{DBMessage, DBRequest};
+use crate::db_actor::message::{DBMessage};
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
@@ -29,6 +29,13 @@ impl NodeManageActorState {
         &mut self,
         actors: Vec<(Range<u64>, NodeManagerRef)>,
     ) {
+        
+        // Delete all entries of nodes in the passed `actors`
+        let refs: Vec<NodeManagerRef> = actors.clone().into_iter().map(|(r,n)| n).collect();
+        self.other_nodes.retain(|_, value| {
+            !refs.contains(value)
+        });
+        
         for (keyspace, node_manager_ref) in actors {
             self.other_nodes.insert(
                 keyspace,
@@ -42,16 +49,18 @@ impl NodeManageActorState {
         keyspaces: &Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>,
         addresses: &Vec<(&ActorRef<NodeManagerMessage>, String)>,
     ) -> Vec<(Range<u64>, NodeManagerRef)> {
-        let zip = keyspaces.into_iter().zip(addresses);
-        zip.map(|t| {
-            let (k, a) = t;
-            let keyspace = k.1.clone();
-            let node_manager_ref = NodeManagerRef{
-                host: a.1.clone()
-            };
-            (keyspace, node_manager_ref)
-        })
-        .collect()
+        let mut merged: Vec<(Range<u64>, NodeManagerRef)> = Vec::with_capacity(keyspaces.len());
+        
+        for keyspace in keyspaces {
+            for addr in addresses {
+                if keyspace.0.get_id() == addr.0.get_id() {
+                    merged.push((keyspace.1.clone(), NodeManagerRef{host: addr.1.clone()}));
+                    continue
+                }
+            }
+        }
+        merged
+        
     }
 
     /// Find the Actor that is responsible for the given hash.
@@ -115,8 +124,12 @@ impl NodeManageActorState {
     ) -> Option<NodeManagerRef> {
         for (keyspace, actor) in &self.other_nodes {
             if keyspace.contains(hash) {
+                info!("{}: {:#018x} contained in {:#018x}..{:#018x}",
+                actor.host, hash, keyspace.start, keyspace.end);
                 return Some(actor.clone());
             }
+            info!("{}: {:#018x} not in {:#018x}..{:#018x}",
+                actor.host, hash, keyspace.start, keyspace.end);
         }
         None
     }

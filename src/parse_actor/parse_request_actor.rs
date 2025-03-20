@@ -1,4 +1,4 @@
-use crate::db_actor::message::{DBMessage, DBRequest};
+use crate::db_actor::message::DBRequest;
 use crate::db_actor::AHasher;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;

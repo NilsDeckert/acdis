@@ -1,6 +1,7 @@
 use crate::node_manager_actor::actor::NodeManagerActor;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
+use log::info;
 use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
 use ractor::{ActorProcessingErr, ActorRef, Message, RpcReplyPort};
@@ -63,8 +64,23 @@ impl NodeManagerActor {
     /// returns: Result<Vec<(&ActorRef<TMsg>, TReply), Global>, Box<dyn Error+Send+Sync, Global>>
     ///
     /// # Examples
-    /// ```
-    /// todo!()
+    ///
+    /// This is a private method.
+    /// The example below is for when you want to extend the `NodeManagerActor`.
+    ///
+    /// ```ignore
+    /// # use ractor::pg;
+    /// # use ractor::ActorRef;
+    /// # use acdis::node_manager_actor::actor::NodeManagerActor;
+    /// # use acdis::node_manager_actor::message::NodeManagerMessage;
+    /// # use acdis::node_manager_actor::message::NodeManagerMessage::QueryAddress;
+    /// let actor_cells = pg::get_members(&String::from("my_process_group"));
+    /// let actor_refs  = actor_cells
+    ///                     .into_iter()
+    ///                     .map(|cell| ActorRef::<NodeManagerMessage>::from(cell))
+    ///                     .collect();
+    ///
+    /// let addresses = self.query(&actor_refs, QueryAddress, None);
     /// ```
     ///
     /// # Note

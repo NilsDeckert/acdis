@@ -167,3 +167,54 @@ impl NodeManageActorState {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use ractor::Actor;
+    use ractor_cluster::node::NodeConnectionMode;
+    use ractor_cluster::{IncomingEncryptionMode, NodeServer};
+
+    #[tokio::test]
+    async fn test_update_index() {
+        // Setup NodeServer just for the ActorRef
+        let pmd = NodeServer::new(
+            0,
+            String::from("cookie"),
+            String::from("TestNodeServer"),
+            String::from("localhost"),
+            Some(IncomingEncryptionMode::Raw),
+            Some(NodeConnectionMode::Transitive),
+        );
+
+        let (pmd_ref, _pmd_handler) = Actor::spawn(None, pmd, ())
+            .await
+            .expect("Failed to spawn port mapper daemon");
+
+        let mut state = NodeManageActorState {
+            keyspace: 0..1, // Not relevant
+            db_actors: HashMap::new(),
+            node_server: pmd_ref,
+            other_nodes: HashMap::new(),
+            redis_host: "127.0.0.1:6379".to_string(),
+        };
+
+        let node_ref_1 = NodeManagerRef {
+            host: "Does not matter".into(),
+        };
+        let node_ref_2 = NodeManagerRef {
+            host: "Also doesnt matter".into(),
+        };
+
+        state.update_index(vec![(0..50, node_ref_1), (50..100, node_ref_2.clone())]);
+
+        assert_eq!(state.other_nodes.len(), 2);
+        assert!(state.other_nodes.get(&(0..50)).is_some());
+        assert!(state.other_nodes.get(&(50..100)).is_some());
+
+        state.update_index(vec![(50..150, node_ref_2.clone())]);
+
+        assert_eq!(state.other_nodes.len(), 2);
+        assert_eq!(state.other_nodes.get(&(0..150)), Some(&node_ref_2));
+    }
+}

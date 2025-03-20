@@ -1,20 +1,25 @@
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::actor::NodeManagerActor;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
+use acdis::hash_slot::hash_slot::HashSlot;
 use log::info;
 use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
 use ractor::{ActorProcessingErr, ActorRef, Message, RpcReplyPort};
-use std::ops::Range;
+use std::ops::{Add, AddAssign, Div, Range, Sub};
 
 impl NodeManagerActor {
     /// Given a range, split it and return both halves
     /// Of size of range is odd, first half will contain the extra element
-    pub(crate) fn halve_range(range: Range<u64>) -> (Range<u64>, Range<u64>) {
-        let length = (range.end - 1) - range.start; // End of range is not inside range
-        let half_length = length.div_ceil(2);
-        let mid = range.start + half_length + 1;
-        (range.start..mid, mid..range.end)
+    pub(crate) fn halve_range(range: HashSlotRange) -> (HashSlotRange, HashSlotRange) {
+        let length = (range.end - 1.into()) - range.start; // End of range is not inside range
+        let half_length = u16::from(length).div_ceil(2);
+        let mid = range.start + half_length.into() + 1.into();
+        (
+            HashSlotRange::new(range.start, mid),
+            HashSlotRange::new(mid, range.end),
+        )
     }
 
     /// Given a list of actors, ask them for their keyspace.
@@ -184,11 +189,11 @@ impl NodeManagerActor {
     /// * `chunks`: Number of chunks to return.
     ///
     /// returns: Vec<(u64, u64), Global>
-    pub(crate) fn chunk_ranges(range: Range<u64>, chunks: u64) -> Vec<Range<u64>> {
+    pub(crate) fn chunk_ranges(range: HashSlotRange, chunks: u16) -> Vec<HashSlotRange> {
         let size = (range.end) - range.start;
 
         let values_per_chunk = size / chunks;
-        let mut ranges: Vec<Range<u64>> = Vec::new();
+        let mut ranges: Vec<HashSlotRange> = Vec::new();
 
         let mut start = range.start;
 
@@ -201,7 +206,7 @@ impl NodeManagerActor {
                 // If this is not the last chunk, increase this by one as it is exclusive
                 end += 1
             }
-            ranges.push(start..end);
+            ranges.push(HashSlotRange::new(start, end));
             start = end;
         }
 

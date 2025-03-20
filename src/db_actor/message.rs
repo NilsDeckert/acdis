@@ -1,4 +1,5 @@
 use crate::db_actor::map_entry::MapEntry;
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use ractor::RpcReplyPort;
 use ractor_cluster::RactorClusterMessage;
 use redis_protocol_bridge::commands::parse::Request;
@@ -16,9 +17,9 @@ pub struct DBRequest {
 pub enum DBMessage {
     #[allow(dead_code)]
     #[rpc]
-    QueryKeyspace(RpcReplyPort<Range<u64>>),
+    QueryKeyspace(RpcReplyPort<HashSlotRange>),
     #[rpc]
-    Responsible(u64, RpcReplyPort<bool>),
+    Responsible(u16, RpcReplyPort<bool>),
     #[rpc]
     Drain(RpcReplyPort<HashMap<String, MapEntry>>),
     Request(DBRequest),
@@ -78,7 +79,7 @@ pub mod tests {
             DBActor,
             DBActorArgs {
                 map: None,
-                range: 0u64..1u64,
+                range: HashSlotRange::from(0u16..1u16),
             },
         )
         .await
@@ -87,8 +88,8 @@ pub mod tests {
         let response = call!(actor, DBMessage::QueryKeyspace);
         if let Ok(response) = response {
             assert!(!response.is_empty());
-            assert_eq!(response.start, 0u64);
-            assert_eq!(response.end, 1u64);
+            assert_eq!(u16::from(response.start), 0u16);
+            assert_eq!(u16::from(response.end), 1u16);
         }
     }
 

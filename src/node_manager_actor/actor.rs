@@ -9,6 +9,7 @@ use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::message::DBMessage;
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::tcp_listener_actor::tcp_listener::{TcpConnectionMessage, TcpListenerActor};
@@ -81,13 +82,13 @@ impl NodeManagerActor {
     /// Returns a HashMap that maps a Range (Keyspace) to a responsible actor
     pub(crate) async fn spawn_db_actors(
         args: DBActorArgs,
-        actors_to_join: u64,
+        actors_to_join: u16,
         supervisor: ActorRef<NodeManagerMessage>,
-    ) -> HashMap<Range<u64>, ActorRef<DBMessage>> {
-        let mut ret_map: HashMap<Range<u64>, ActorRef<DBMessage>> = HashMap::new();
+    ) -> HashMap<HashSlotRange, ActorRef<DBMessage>> {
+        let mut ret_map: HashMap<HashSlotRange, ActorRef<DBMessage>> = HashMap::new();
         info!(
-            "Spawning {} DB actors for range {:#018x}..{:#018x}",
-            actors_to_join, args.range.start, args.range.end
+            "Spawning {} DB actors for range {}",
+            actors_to_join, args.range
         );
 
         let mut initial_maps = vec![];
@@ -114,10 +115,7 @@ impl NodeManagerActor {
             for map in initial_maps {
                 let range = map.range.clone();
                 let (actor_ref, _handle) = Actor::spawn_linked(
-                    Some(format!(
-                        "DBActor {:#018x}..{:#018x}",
-                        range.start, range.end
-                    )),
+                    Some(format!("DBActor {}", range)),
                     DBActor,
                     DBActorArgs {
                         map: Some(map),
@@ -133,10 +131,7 @@ impl NodeManagerActor {
         } else {
             for range in ranges {
                 let (actor_ref, _handle) = Actor::spawn_linked(
-                    Some(format!(
-                        "DBActor {:#018x}..{:#018x}",
-                        range.start, range.end
-                    )),
+                    Some(format!("DBActor {}", range)),
                     DBActor,
                     DBActorArgs {
                         map: None,

@@ -13,6 +13,8 @@ mod tcp_listener_actor;
 mod tcp_reader_actor;
 mod tcp_writer_actor;
 
+mod hash_slot;
+
 fn setup_logging() {
     let logconfig = ConfigBuilder::new()
         .set_level_color(Level::Error, Some(Color::Red))

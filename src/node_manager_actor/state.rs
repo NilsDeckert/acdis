@@ -1,4 +1,6 @@
 use crate::db_actor::message::DBMessage;
+use crate::hash_slot::hash_slot::HashSlot;
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
@@ -12,20 +14,20 @@ use std::ops::Range;
 #[derive(Clone)]
 pub struct NodeManageActorState {
     /// The keyspace that is managed by this node
-    pub keyspace: Range<u64>,
+    pub keyspace: HashSlotRange,
     /// This node's actors, identified by their part of the keyspace
-    pub db_actors: HashMap<Range<u64>, ActorRef<DBMessage>>,
+    pub db_actors: HashMap<HashSlotRange, ActorRef<DBMessage>>,
     /// The [`NodeServer`] that manages external connections for this node
     pub node_server: ActorRef<NodeServerMessage>,
     /// The other NodeManagers in this cluster, identified by their keyspace
-    pub other_nodes: HashMap<Range<u64>, NodeManagerRef>,
+    pub other_nodes: HashMap<HashSlotRange, NodeManagerRef>,
     /// The port that accepts redis requests
     pub redis_host: String,
 }
 
 impl NodeManageActorState {
     /// Given a list of (ActorRef, Keyspace, Address) Tuples, add them to HashMap of other NodeManagers
-    pub(crate) fn update_index(&mut self, actors: Vec<(Range<u64>, NodeManagerRef)>) {
+    pub(crate) fn update_index(&mut self, actors: Vec<(HashSlotRange, NodeManagerRef)>) {
         // Delete all entries of nodes in the passed `actors`
         let refs: Vec<NodeManagerRef> = actors.clone().into_iter().map(|(r, n)| n).collect();
         self.other_nodes.retain(|_, value| !refs.contains(value));
@@ -37,10 +39,10 @@ impl NodeManageActorState {
 
     pub(crate) fn merge_vec(
         &mut self,
-        keyspaces: &Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>,
+        keyspaces: &Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)>,
         addresses: &Vec<(&ActorRef<NodeManagerMessage>, String)>,
-    ) -> Vec<(Range<u64>, NodeManagerRef)> {
-        let mut merged: Vec<(Range<u64>, NodeManagerRef)> = Vec::with_capacity(keyspaces.len());
+    ) -> Vec<(HashSlotRange, NodeManagerRef)> {
+        let mut merged: Vec<(HashSlotRange, NodeManagerRef)> = Vec::with_capacity(keyspaces.len());
 
         for keyspace in keyspaces {
             for addr in addresses {
@@ -68,24 +70,27 @@ impl NodeManageActorState {
     ///  - `Some(ActorRef<DBMessage>)` if a responsible actor was found
     ///  - `None` otherwise
     ///
-    pub(crate) fn find_responsible_by_hash(&self, hash: &u64) -> Option<ActorRef<DBMessage>> {
-        if !self.keyspace.contains(&hash) {
+    pub(crate) fn find_responsible_by_hashslot(
+        &self,
+        hashslot: &HashSlot,
+    ) -> Option<ActorRef<DBMessage>> {
+        if !self.keyspace.contains(&hashslot) {
             error!(
-                "Tried to find actor for hash {:#018x}, but we only manage {:#018x}..{:#018x}",
-                &hash, self.keyspace.start, self.keyspace.end
+                "Tried to find actor for hash {:#?}, but we only manage {}",
+                &hashslot, self.keyspace
             );
             return None;
         }
 
         for keyspace in self.db_actors.keys() {
-            if keyspace.contains(hash) {
+            if keyspace.contains(hashslot) {
                 return Some(self.db_actors[keyspace].clone());
             }
         }
 
-        error!("No actor responsible for {:#018x}", &hash);
+        error!("No actor responsible for {:?}", &hashslot);
         for keyspace in self.db_actors.keys() {
-            error!(" - {:#018x}..{:#018x}", keyspace.start, keyspace.end)
+            error!(" - {}", keyspace)
         }
         None
     }
@@ -105,20 +110,23 @@ impl NodeManageActorState {
         match request {
             // Requests with key need hashing to find responsible
             Request::GET { key } | Request::SET { key, .. } => {
-                let hash = ParseRequestActor::hash(&key);
-                self.find_responsible_by_hash(&hash)
+                let hashslot = HashSlot::new(key);
+                self.find_responsible_by_hashslot(&hashslot)
             }
             // Doesn't matter who handles this, take first in list
             _ => self.db_actors.values().into_iter().next().cloned(),
         }
     }
 
-    pub(crate) fn find_responsible_node_by_hash(&self, hash: &u64) -> Option<NodeManagerRef> {
+    pub(crate) fn find_responsible_node_by_hashslot(
+        &self,
+        hashslot: &HashSlot,
+    ) -> Option<NodeManagerRef> {
         for (keyspace, actor) in &self.other_nodes {
-            if keyspace.contains(hash) {
+            if keyspace.contains(hashslot) {
                 info!(
                     "{}: {:#018x} contained in {:#018x}..{:#018x}",
-                    actor.host, hash, keyspace.start, keyspace.end
+                    actor.host, hashslot, keyspace.start, keyspace.end
                 );
                 return Some(actor.clone());
             }
@@ -137,7 +145,7 @@ impl NodeManageActorState {
         match request {
             Request::GET { key } | Request::SET { key, .. } => {
                 let hash = ParseRequestActor::hash(&key);
-                self.find_responsible_node_by_hash(&hash)
+                self.find_responsible_node_by_hashslot(&hash)
             }
             _ => self.other_nodes.values().into_iter().next().cloned(),
         }
@@ -147,7 +155,7 @@ impl NodeManageActorState {
         match request {
             Request::GET { key } | Request::SET { key, .. } => {
                 let hash = ParseRequestActor::hash(&key);
-                let responsible = self.find_responsible_node_by_hash(&hash);
+                let responsible = self.find_responsible_node_by_hashslot(&hash);
                 if let Some(responsible) = responsible {
                     let slot = ParseRequestActor::crc16(&key) % 16384;
                     info!("MOVED {slot} {}", responsible.host);

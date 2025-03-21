@@ -1,5 +1,6 @@
 use crate::db_actor::message::DBRequest;
 use crate::db_actor::AHasher;
+use crate::hash_slot::hash_slot::HashSlot;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
 use log::{debug, error, info, warn};
@@ -141,13 +142,13 @@ impl ParseRequestActor {
 
         match request {
             Request::GET { key } | Request::SET { key, .. } => {
-                let hash = ParseRequestActor::hash(key);
-                debug!("Hash: {:#018x}", hash);
+                let hashslot = HashSlot::new(key);
+                debug!("{:#?}", hashslot);
 
                 for member in members {
                     let actor_ref = ActorRef::<NodeManagerMessage>::from(member);
 
-                    match call!(actor_ref, NodeManagerMessage::Responsible, hash) {
+                    match call!(actor_ref, NodeManagerMessage::Responsible, hashslot) {
                         Ok(responsible) => {
                             if responsible {
                                 return Ok(actor_ref);

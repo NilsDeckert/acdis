@@ -3,7 +3,6 @@ use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef};
 use ractor_cluster::node::NodeConnectionMode;
 use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
 use std::collections::HashMap;
-use std::ops::Range;
 
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
@@ -79,7 +78,7 @@ impl NodeManagerActor {
     ///  * supervisor: [`NodeManagerActor`] that the db_actors will be linked to. Usually the caller.
     ///
     /// # Returns
-    /// Returns a HashMap that maps a Range (Keyspace) to a responsible actor
+    /// A HashMap that maps a Range (Keyspace) to a responsible actor
     pub(crate) async fn spawn_db_actors(
         args: DBActorArgs,
         actors_to_join: u16,
@@ -169,7 +168,7 @@ impl NodeManagerActor {
     pub(crate) fn send_index_update(
         &self,
         myself: ActorRef<NodeManagerMessage>,
-        keyspace: Range<u64>,
+        keyspace: HashSlotRange,
         info: NodeManagerRef,
     ) -> Result<(), ActorProcessingErr> {
         let others = pg::get_members(&String::from("acdis_node_managers"));
@@ -192,14 +191,20 @@ mod tests {
     use super::*;
     #[test]
     fn test_halve_range() {
-        assert_eq!(NodeManagerActor::halve_range(0..11), (0..6, 6..11));
-        assert_eq!(NodeManagerActor::halve_range(0..10), (0..6, 6..10));
+        assert_eq!(
+            NodeManagerActor::halve_range((0..11).into()),
+            ((0..6).into(), (6..11).into())
+        );
+        assert_eq!(
+            NodeManagerActor::halve_range((0..10).into()),
+            ((0..6).into(), (6..10).into())
+        );
     }
 
     #[test]
     fn test_chunk_range_halve() {
-        let chunked_ranges = NodeManagerActor::chunk_ranges(0..11, 2);
-        let halved_ranges = NodeManagerActor::halve_range(0..11);
+        let chunked_ranges = NodeManagerActor::chunk_ranges((0..11).into(), 2);
+        let halved_ranges = NodeManagerActor::halve_range((0..11).into());
         assert_eq!(chunked_ranges[0], halved_ranges.0);
         assert_eq!(chunked_ranges[1], halved_ranges.1);
     }

@@ -1,56 +1,35 @@
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::actor::NodeManagerActor;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::QueryKeyspace;
-use log::info;
 use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
 use ractor::{ActorProcessingErr, ActorRef, Message, RpcReplyPort};
-use std::ops::Range;
 
 impl NodeManagerActor {
     /// Given a range, split it and return both halves
-    /// Of size of range is odd, first half will contain the extra element
-    pub(crate) fn halve_range(range: Range<u64>) -> (Range<u64>, Range<u64>) {
-        let length = (range.end - 1) - range.start; // End of range is not inside range
-        let half_length = length.div_ceil(2);
-        let mid = range.start + half_length + 1;
-        (range.start..mid, mid..range.end)
+    /// If size of range is odd, first half will contain the extra element
+    pub(crate) fn halve_range(range: HashSlotRange) -> (HashSlotRange, HashSlotRange) {
+        let length = range.len();
+        let half_length = u16::from(length).div_ceil(2);
+        let mid = range.start + half_length;
+        (
+            HashSlotRange::new(range.start, mid - 1),
+            HashSlotRange::new(mid, range.end),
+        )
     }
 
     /// Given a list of actors, ask them for their keyspace.
     ///
     /// ## Returns
     ///  - List of (Actor, Keyspace) Tuples:
-    ///    - `Ok(Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>`
+    ///    - `Ok(Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)>`
     ///  - Error:
     ///    - `Err(Box<dyn Error + Send + Sync>)`
     pub(crate) async fn query_keyspaces(
         actors: &Vec<ActorRef<NodeManagerMessage>>,
-    ) -> Result<Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>, ActorProcessingErr> {
+    ) -> Result<Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)>, ActorProcessingErr> {
         Self::query(&actors[..], QueryKeyspace, None).await
-        // let tasks: Vec<JoinHandle<(ActorRef<NodeManagerMessage>, Range<u64>)>> = actors
-        //     .into_iter()
-        //     .map(|actor| {
-        //         let actor_ref = ActorRef::<NodeManagerMessage>::from(actor.clone());
-        //         tokio::spawn(async move {
-        //             let keyspace = actor_ref.call(QueryKeyspace, None).await;
-        //             (
-        //                 actor_ref,
-        //                 keyspace.unwrap().expect("Failed to query keyspace"),
-        //             )
-        //         })
-        //     })
-        //     .collect();
-        //
-        // // Panics inside a thread return a JoinError
-        // let join_results: Vec<Result<(ActorRef<_>, Range<u64>), JoinError>> = join_all(tasks).await;
-        // // Instead of returning a Vec where some of the elements might be Errors, we want to either
-        // // return a successful Vec or an Error.
-        // let result: Result<Vec<_>, JoinError> = join_results.into_iter().collect();
-        // match result {
-        //     Ok(t) => Ok(t),
-        //     Err(e) => Err(ActorProcessingErr::from(e)),
-        // }
     }
 
     /// Send a request to multiple actors and return a list of (Actor, Response) tuples
@@ -126,49 +105,16 @@ impl NodeManagerActor {
         }
     }
 
-    // TODO: Remove once we're sure the refactored version works
-    // pub(crate) async fn query_address(
-    //     actors: &[ActorRef<NodeManagerMessage>],
-    // ) -> Result<Vec<(&ActorRef<NodeManagerMessage>, String)>, ActorProcessingErr> {
-    //     let reply = ractor::rpc::multi_call(actors, QueryAddress, None).await;
-    //     match reply {
-    //         Ok(reply) => {
-    //             if reply.contains(&CallResult::<String>::SenderError)
-    //                 || reply.contains(&CallResult::<String>::Timeout)
-    //             {
-    //                 Err(ActorProcessingErr::from(
-    //                     "One or more requests returned an error",
-    //                 ))
-    //             } else {
-    //                 // reply: Vec<CallResult::<String>::Success(address)>
-    //                 let addresses: Vec<String> = reply
-    //                     .into_iter()
-    //                     .map(|call_result| {
-    //                         if let CallResult::Success(result) = call_result {
-    //                             result
-    //                         } else {
-    //                             panic!("CallResult returned an error despite prior check");
-    //                         }
-    //                     })
-    //                     .collect();
-    //
-    //                 Ok(actors.into_iter().zip(addresses).collect())
-    //             }
-    //         }
-    //         Err(e) => Err(ActorProcessingErr::from(e)),
-    //     }
-    // }
-
     /// Sort a list of (Actor, Keyspace) tuples by the size of the keyspace.
     ///
     /// # Arguments
     ///
-    /// * `keyspaces`: A tuple ([`ActorRef`], Range<u64>)
+    /// * `keyspaces`: A tuple ([`ActorRef`], HashSlotRange)
     ///
-    /// returns: Vec<(ActorRef<NodeManagerMessage>, Range<u64>), Global>
+    /// returns: Vec<(ActorRef<NodeManagerMessage>, HashSlotRange), Global>
     pub(crate) async fn sort_actors_by_keyspace(
-        mut keyspaces: Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)>,
-    ) -> Vec<(&ActorRef<NodeManagerMessage>, Range<u64>)> {
+        mut keyspaces: Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)>,
+    ) -> Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)> {
         keyspaces.sort_by_key(|(_id, keyspace)| keyspace.end - keyspace.start);
         keyspaces
     }
@@ -184,11 +130,11 @@ impl NodeManagerActor {
     /// * `chunks`: Number of chunks to return.
     ///
     /// returns: Vec<(u64, u64), Global>
-    pub(crate) fn chunk_ranges(range: Range<u64>, chunks: u64) -> Vec<Range<u64>> {
+    pub(crate) fn chunk_ranges(range: HashSlotRange, chunks: u16) -> Vec<HashSlotRange> {
         let size = (range.end) - range.start;
 
         let values_per_chunk = size / chunks;
-        let mut ranges: Vec<Range<u64>> = Vec::new();
+        let mut ranges: Vec<HashSlotRange> = Vec::new();
 
         let mut start = range.start;
 
@@ -201,10 +147,54 @@ impl NodeManagerActor {
                 // If this is not the last chunk, increase this by one as it is exclusive
                 end += 1
             }
-            ranges.push(start..end);
+            ranges.push(HashSlotRange::new(start, end));
             start = end;
         }
 
         ranges
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn test_halve_range_even_1() {
+        let a = HashSlotRange::from(0..1);
+        let (a1, a2) = NodeManagerActor::halve_range(a);
+
+        assert_eq!(a.len(), 2);
+        assert_eq!(a1.len(), 1);
+        assert_eq!(a2.len(), 1);
+
+        assert_eq!(a1, HashSlotRange::from(0..0));
+        assert_eq!(a2, HashSlotRange::from(1..1));
+    }
+
+    #[test]
+    fn test_halve_range_even_2() {
+        let a = HashSlotRange::from(0..3);
+        let (a1, a2) = NodeManagerActor::halve_range(a);
+
+        assert_eq!(a.len(), 4);
+        assert_eq!(a1.len(), 2);
+        assert_eq!(a2.len(), 2);
+
+        assert_eq!(a1, HashSlotRange::from(0..1));
+        assert_eq!(a2, HashSlotRange::from(2..3));
+    }
+
+    #[test]
+    fn test_halve_range_odd() {
+        let a = HashSlotRange::from(0..2);
+        let (a1, a2) = NodeManagerActor::halve_range(a);
+
+        assert_eq!(a.len(), 3);
+        assert_eq!(a1.len(), 2);
+        assert_eq!(a2.len(), 1);
+
+        assert_eq!(a1, HashSlotRange::from(0..1));
+        assert_eq!(a2, HashSlotRange::from(2..2));
     }
 }

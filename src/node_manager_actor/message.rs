@@ -1,24 +1,25 @@
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::message::DBRequest;
+use crate::hash_slot::hash_slot::HashSlot;
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::NodeManagerRef;
 use ractor::RpcReplyPort;
 use ractor_cluster::RactorClusterMessage;
-use std::ops::Range;
 
 #[derive(RactorClusterMessage)]
 pub enum NodeManagerMessage {
     Init,
     #[rpc]
-    QueryKeyspace(RpcReplyPort<Range<u64>>),
+    QueryKeyspace(RpcReplyPort<HashSlotRange>),
     #[rpc]
-    AdoptKeyspace(Range<u64>, RpcReplyPort<PartitionedHashMap>),
-    SetKeyspace(Range<u64>),
+    AdoptKeyspace(HashSlotRange, RpcReplyPort<PartitionedHashMap>),
+    SetKeyspace(HashSlotRange),
     #[rpc]
     QueryNodes(RpcReplyPort<Vec<String>>),
     #[rpc]
-    Responsible(u64, RpcReplyPort<bool>),
+    Responsible(HashSlot, RpcReplyPort<bool>),
     Forward(DBRequest),
     #[rpc]
     QueryAddress(RpcReplyPort<String>),
-    IndexUpdate(Range<u64>, NodeManagerRef),
+    IndexUpdate(HashSlotRange, NodeManagerRef),
 }

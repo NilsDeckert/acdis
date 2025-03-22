@@ -1,7 +1,6 @@
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ractor::{async_trait, cast, Actor, ActorProcessingErr, ActorRef, Message, RpcReplyPort};
-use std::os::linux::raw::stat;
 /// This file groups benchmarks concerning message passing.
 ///
 /// The following ways of message passing are compared:
@@ -10,7 +9,6 @@ use std::os::linux::raw::stat;
 ///  - Tokio Channels
 ///  - async_channel
 use std::sync::mpsc;
-use std::sync::mpsc::{Receiver, Sender};
 use std::time::{Duration, Instant};
 
 use futures::future::join_all;

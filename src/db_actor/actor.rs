@@ -2,7 +2,8 @@ use crate::db_actor::command_handler::handle_info;
 use crate::db_actor::map_entry::MapEntry;
 use crate::db_actor::message::DBMessage;
 use crate::db_actor::HashMap;
-use crate::parse_actor::parse_request_actor::ParseRequestActor;
+use crate::hash_slot::hash_slot::HashSlot;
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use log::{debug, warn};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
@@ -11,31 +12,24 @@ use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{command, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 use serde::{Deserialize, Serialize};
-use std::ops::Range;
 
 pub struct DBActor;
 
 #[derive(Serialize, Deserialize, Clone)]
 pub struct PartitionedHashMap {
     pub map: HashMap<String, MapEntry>,
-    pub range: Range<u64>,
+    pub range: HashSlotRange,
 }
 
 impl PartitionedHashMap {
-    pub fn in_range(&self, key: &String) -> bool {
-        let hash = ParseRequestActor::hash(key);
-
-        if self.range.contains(&hash) {
-            true
-        } else {
-            false
-        }
+    pub fn in_range(&self, key: &str) -> bool {
+        self.range.contains(&HashSlot::from(key))
     }
 }
 
 pub struct DBActorArgs {
     pub(crate) map: Option<PartitionedHashMap>,
-    pub(crate) range: Range<u64>,
+    pub(crate) range: HashSlotRange,
 }
 
 #[async_trait]
@@ -60,10 +54,9 @@ impl Actor for DBActor {
 
         let members = ractor::pg::get_members(&group_name);
         debug!(
-            "We're one of {} actors in this cluster managing {:#018x}..{:#018x}",
+            "We're one of {} actors in this cluster managing {}",
             members.len(),
-            args.range.start,
-            args.range.end
+            args.range
         );
 
         Ok(map)
@@ -86,7 +79,7 @@ impl Actor for DBActor {
             DBMessage::Responsible(hash, reply) => {
                 debug!("Received responsibility check");
                 if !reply.is_closed() {
-                    reply.send(map.range.contains(&hash))?
+                    reply.send(map.range.contains(&hash.into()))?
                 }
                 Ok(())
             }

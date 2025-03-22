@@ -1,5 +1,7 @@
 use crate::db_actor::actor::{DBActorArgs, PartitionedHashMap};
 use crate::db_actor::message::DBMessage;
+use crate::hash_slot::hash_slot_range::HashSlotRange;
+use crate::hash_slot::{MAX, MIN};
 use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::*;
@@ -87,7 +89,7 @@ impl Actor for NodeManagerActor {
         myself.send_message(Init)?;
 
         Ok(NodeManageActorState {
-            keyspace: 0u64..u64::MAX,
+            keyspace: HashSlotRange::from(MIN..MAX),
             db_actors: HashMap::new(),
             node_server: pmd_ref,
             other_nodes: HashMap::new(),
@@ -164,7 +166,7 @@ impl Actor for NodeManagerActor {
                     own.db_actors = Self::spawn_db_actors(
                         DBActorArgs {
                             map: None,
-                            range: 0u64..u64::MAX,
+                            range: HashSlotRange::from(MIN..MAX),
                         },
                         8,
                         myself.clone(),
@@ -177,10 +179,7 @@ impl Actor for NodeManagerActor {
 
                 // TODO: Remove
                 for (keyspace, info) in &own.other_nodes {
-                    println!(
-                        "- {:#018x}..{:#018x}: {:#?}",
-                        keyspace.start, keyspace.end, info
-                    )
+                    println!("- {keyspace}: {:#?}", info)
                 }
 
                 // Inform other nodes about our initial keyspace
@@ -201,7 +200,7 @@ impl Actor for NodeManagerActor {
             }
             SetKeyspace(range) => {
                 // TODO
-                info!("Setting keyspace to {:#?}", range);
+                info!("Setting keyspace to {range}");
                 own.keyspace = range;
                 if myself.get_children().is_empty() {
                     own.db_actors = NodeManagerActor::spawn_db_actors(
@@ -217,10 +216,8 @@ impl Actor for NodeManagerActor {
             }
             AdoptKeyspace(requested, reply) => {
                 info!(
-                    "{} Giving away keyspace {:#018x}..{:#018x}",
-                    myself.get_name().unwrap_or(String::from("node_manager")),
-                    requested.start,
-                    requested.end
+                    "{} Giving away keyspace {requested}",
+                    myself.get_name().unwrap_or(String::from("node_manager"))
                 );
 
                 assert_ne!(requested, own.keyspace); // Don't give up whole keyspace.
@@ -247,10 +244,7 @@ impl Actor for NodeManagerActor {
                         && actor_keyspace.end <= requested.end
                     {
                         // ""Kill"" actor and fetch HashMap
-                        info!(
-                            "'Killing' actor {:?} for keyspace {:#?}",
-                            actor, actor_keyspace
-                        );
+                        info!("'Killing' actor {:?} for keyspace {actor_keyspace}", actor);
                         let actor_hashmap = call!(actor, DBMessage::Drain);
                         return_map.map.extend(actor_hashmap.unwrap());
 
@@ -263,12 +257,8 @@ impl Actor for NodeManagerActor {
                     } else {
                         warn!(
                             "Did not cover this case:\n\
-                        The keyspace of this actor ({:#018x}..{:#018x}) is not fully inside the \
-                        requested keyspace ({:#018x}..{:#018x})",
-                            actor_keyspace.start,
-                            actor_keyspace.end,
-                            requested.start,
-                            requested.end
+                        The keyspace of this actor ({actor_keyspace}) is not fully inside the \
+                        requested keyspace ({requested})"
                         )
                     }
                 }
@@ -292,10 +282,7 @@ impl Actor for NodeManagerActor {
                     panic!("Requested keyspace is not at one end of our keyspace.")
                 }
 
-                info!(
-                    "Our new keyspace: {:#018x}..{:#018x}",
-                    own.keyspace.start, own.keyspace.end
-                );
+                info!("Our new keyspace: {}", own.keyspace);
 
                 // Inform other nodes that our keyspace has changed
                 self.send_index_update(
@@ -348,8 +335,8 @@ impl Actor for NodeManagerActor {
             QueryAddress(reply) => reply.send(own.redis_host.clone())?,
             IndexUpdate(keyspace, node_manager_ref) => {
                 info!(
-                    "Actor {} updated their keyspace to {:#018x}..{:#018x}",
-                    node_manager_ref.host, keyspace.start, keyspace.end
+                    "Actor {} updated their keyspace to {keyspace}",
+                    node_manager_ref.host
                 );
                 own.update_index(vec![(keyspace, node_manager_ref)])
             }

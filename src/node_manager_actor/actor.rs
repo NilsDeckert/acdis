@@ -3,12 +3,12 @@ use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef};
 use ractor_cluster::node::NodeConnectionMode;
 use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
 use std::collections::HashMap;
-use std::ops::Range;
 
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::message::DBMessage;
+use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::tcp_listener_actor::tcp_listener::{TcpConnectionMessage, TcpListenerActor};
@@ -78,16 +78,16 @@ impl NodeManagerActor {
     ///  * supervisor: [`NodeManagerActor`] that the db_actors will be linked to. Usually the caller.
     ///
     /// # Returns
-    /// Returns a HashMap that maps a Range (Keyspace) to a responsible actor
+    /// A HashMap that maps a Range (Keyspace) to a responsible actor
     pub(crate) async fn spawn_db_actors(
         args: DBActorArgs,
-        actors_to_join: u64,
+        actors_to_join: u16,
         supervisor: ActorRef<NodeManagerMessage>,
-    ) -> HashMap<Range<u64>, ActorRef<DBMessage>> {
-        let mut ret_map: HashMap<Range<u64>, ActorRef<DBMessage>> = HashMap::new();
+    ) -> HashMap<HashSlotRange, ActorRef<DBMessage>> {
+        let mut ret_map: HashMap<HashSlotRange, ActorRef<DBMessage>> = HashMap::new();
         info!(
-            "Spawning {} DB actors for range {:#018x}..{:#018x}",
-            actors_to_join, args.range.start, args.range.end
+            "Spawning {} DB actors for range {}",
+            actors_to_join, args.range
         );
 
         let mut initial_maps = vec![];
@@ -114,10 +114,7 @@ impl NodeManagerActor {
             for map in initial_maps {
                 let range = map.range.clone();
                 let (actor_ref, _handle) = Actor::spawn_linked(
-                    Some(format!(
-                        "DBActor {:#018x}..{:#018x}",
-                        range.start, range.end
-                    )),
+                    Some(format!("DBActor {}", range)),
                     DBActor,
                     DBActorArgs {
                         map: Some(map),
@@ -133,10 +130,7 @@ impl NodeManagerActor {
         } else {
             for range in ranges {
                 let (actor_ref, _handle) = Actor::spawn_linked(
-                    Some(format!(
-                        "DBActor {:#018x}..{:#018x}",
-                        range.start, range.end
-                    )),
+                    Some(format!("DBActor {}", range)),
                     DBActor,
                     DBActorArgs {
                         map: None,
@@ -174,7 +168,7 @@ impl NodeManagerActor {
     pub(crate) fn send_index_update(
         &self,
         myself: ActorRef<NodeManagerMessage>,
-        keyspace: Range<u64>,
+        keyspace: HashSlotRange,
         info: NodeManagerRef,
     ) -> Result<(), ActorProcessingErr> {
         let others = pg::get_members(&String::from("acdis_node_managers"));
@@ -197,14 +191,20 @@ mod tests {
     use super::*;
     #[test]
     fn test_halve_range() {
-        assert_eq!(NodeManagerActor::halve_range(0..11), (0..6, 6..11));
-        assert_eq!(NodeManagerActor::halve_range(0..10), (0..6, 6..10));
+        assert_eq!(
+            NodeManagerActor::halve_range((0..11).into()),
+            ((0..6).into(), (6..11).into())
+        );
+        assert_eq!(
+            NodeManagerActor::halve_range((0..10).into()),
+            ((0..6).into(), (6..10).into())
+        );
     }
 
     #[test]
     fn test_chunk_range_halve() {
-        let chunked_ranges = NodeManagerActor::chunk_ranges(0..11, 2);
-        let halved_ranges = NodeManagerActor::halve_range(0..11);
+        let chunked_ranges = NodeManagerActor::chunk_ranges((0..11).into(), 2);
+        let halved_ranges = NodeManagerActor::halve_range((0..11).into());
         assert_eq!(chunked_ranges[0], halved_ranges.0);
         assert_eq!(chunked_ranges[1], halved_ranges.1);
     }

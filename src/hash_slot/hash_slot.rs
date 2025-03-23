@@ -1,6 +1,6 @@
 use crate::hash_slot::MOD;
 use serde::{Deserialize, Serialize};
-use std::ops::{Add, AddAssign, Div, Sub};
+use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
 pub struct HashSlot(pub u16);
@@ -24,6 +24,12 @@ impl Sub<u16> for HashSlot {
 
     fn sub(self, rhs: u16) -> Self::Output {
         HashSlot(self.0 - rhs)
+    }
+}
+
+impl SubAssign<u16> for HashSlot {
+    fn sub_assign(&mut self, rhs: u16) {
+        self.0 -= rhs;
     }
 }
 

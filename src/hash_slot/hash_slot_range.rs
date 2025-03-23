@@ -66,6 +66,12 @@ impl From<HashSlotRange> for Range<u16> {
     }
 }
 
+impl From<&HashSlotRange> for (u16, u16) {
+    fn from(value: &HashSlotRange) -> Self {
+        (value.start.0, value.end.0)
+    }
+}
+
 #[cfg(test)]
 mod test {
     use crate::hash_slot::hash_slot::HashSlot;

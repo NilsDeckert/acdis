@@ -7,18 +7,6 @@ use ractor::rpc::CallResult;
 use ractor::{ActorProcessingErr, ActorRef, Message, RpcReplyPort};
 
 impl NodeManagerActor {
-    /// Given a range, split it and return both halves
-    /// If size of range is odd, first half will contain the extra element
-    pub(crate) fn halve_range(range: HashSlotRange) -> (HashSlotRange, HashSlotRange) {
-        let length = range.len();
-        let half_length = u16::from(length).div_ceil(2);
-        let mid = range.start + half_length;
-        (
-            HashSlotRange::new(range.start, mid - 1),
-            HashSlotRange::new(mid, range.end),
-        )
-    }
-
     /// Given a list of actors, ask them for their keyspace.
     ///
     /// ## Returns
@@ -119,36 +107,45 @@ impl NodeManagerActor {
         keyspaces
     }
 
+    /// Given a range, split it and return both halves
+    /// If size of range is odd, first half will contain the extra element
+    pub(crate) fn halve_range(range: HashSlotRange) -> (HashSlotRange, HashSlotRange) {
+        let length = range.len();
+        let half_length = u16::from(length).div_ceil(2);
+        let mid = range.start + half_length;
+        (
+            HashSlotRange::new(range.start, mid - 1),
+            HashSlotRange::new(mid, range.end),
+        )
+    }
+
     /// Divide a given [`Range`] into equally sized parts.
-    ///
-    /// # **Warning**
-    /// We want to use the entire keyspace from 0x00 to u64MAX.
-    /// However, we cannot really express this, since we can't return U64MAX+1. TODO.
     ///
     /// # Arguments
     /// * `range`: Keyspace to split
     /// * `chunks`: Number of chunks to return.
     ///
-    /// returns: Vec<(u64, u64), Global>
+    /// returns: Vec<HashSlotRange, Global>
     pub(crate) fn chunk_ranges(range: HashSlotRange, chunks: u16) -> Vec<HashSlotRange> {
-        let size = (range.end) - range.start;
+        let size = range.len();
 
-        let values_per_chunk = size / chunks;
-        let mut ranges: Vec<HashSlotRange> = Vec::new();
+        let values_per_chunk = size.div_ceil(chunks);
+        let mut ranges: Vec<HashSlotRange> = Vec::with_capacity(chunks as usize);
 
         let mut start = range.start;
 
         for i in 0..chunks {
-            let mut end = start + values_per_chunk;
+            let mut end = start + values_per_chunk - 1;
             // If this is the last chunk, make this contain the extra elements
             if i == chunks - 1 {
-                //end += size%chunks;
+                // end += (size % chunks) as i32;
+                end -= (values_per_chunk * chunks) - size;
             } else {
                 // If this is not the last chunk, increase this by one as it is exclusive
-                end += 1
+                //end += 1
             }
             ranges.push(HashSlotRange::new(start, end));
-            start = end;
+            start = end + 1;
         }
 
         ranges
@@ -196,5 +193,47 @@ mod test {
 
         assert_eq!(a1, HashSlotRange::from(0..1));
         assert_eq!(a2, HashSlotRange::from(2..2));
+    }
+
+    #[test]
+    fn test_chunk_range_halve() {
+        let chunked_ranges = NodeManagerActor::chunk_ranges((0..11).into(), 2);
+        let halved_ranges = NodeManagerActor::halve_range((0..11).into());
+        assert_eq!(chunked_ranges[0], halved_ranges.0);
+        assert_eq!(chunked_ranges[1], halved_ranges.1);
+    }
+
+    #[test]
+    fn test_chunk_ranges_even() {
+        let range = HashSlotRange::from(0..11);
+        let expected = vec![
+            HashSlotRange::from(0..2),
+            HashSlotRange::from(3..5),
+            HashSlotRange::from(6..8),
+            HashSlotRange::from(9..11),
+        ];
+        let result = NodeManagerActor::chunk_ranges(range, 4);
+        assert_eq!(result.len(), expected.len());
+
+        for (r, e) in result.iter().zip(expected.iter()) {
+            assert_eq!(r, e)
+        }
+    }
+
+    #[test]
+    fn test_chunk_ranges_odd() {
+        let range = HashSlotRange::from(0..10);
+        let expected = vec![
+            HashSlotRange::from(0..2),
+            HashSlotRange::from(3..5),
+            HashSlotRange::from(6..8),
+            HashSlotRange::from(9..10),
+        ];
+        let result = NodeManagerActor::chunk_ranges(range, 4);
+        assert_eq!(result.len(), expected.len());
+
+        for (r, e) in result.iter().zip(expected.iter()) {
+            assert_eq!(r, e)
+        }
     }
 }

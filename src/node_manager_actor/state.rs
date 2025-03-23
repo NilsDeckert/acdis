@@ -11,7 +11,7 @@ use redis_protocol_bridge::commands::parse::Request;
 use std::collections::HashMap;
 
 #[derive(Clone)]
-pub struct NodeManageActorState {
+pub struct NodeManagerActorState {
     /// The keyspace that is managed by this node
     pub keyspace: HashSlotRange,
     /// This node's actors, identified by their part of the keyspace
@@ -24,7 +24,7 @@ pub struct NodeManageActorState {
     pub redis_host: String,
 }
 
-impl NodeManageActorState {
+impl NodeManagerActorState {
     /// Given a list of (ActorRef, Keyspace, Address) Tuples, add them to HashMap of other NodeManagers
     pub(crate) fn update_index(&mut self, actors: Vec<(HashSlotRange, NodeManagerRef)>) {
         // Delete all entries of nodes in the passed `actors`
@@ -192,7 +192,7 @@ mod tests {
             .await
             .expect("Failed to spawn port mapper daemon");
 
-        let mut state = NodeManageActorState {
+        let mut state = NodeManagerActorState {
             keyspace: HashSlotRange::from(0..1), // Not relevant
             db_actors: HashMap::new(),
             node_server: pmd_ref,

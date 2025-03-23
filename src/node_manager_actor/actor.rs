@@ -50,9 +50,9 @@ impl NodeManagerActor {
     ///  * REDIS_PORT: For [`NodeType::Server`] this defaults to `6379`, otherwise to `0`.
     ///
     /// # Returns
-    ///  The address that the TCP port was assigned.
+    ///  The ip and port that the TCP port was assigned.
     ///  In most cases this is `REDIS_HOST:REDIS_PORT` but differs if `REDIS_PORT` is `0`
-    pub(crate) async fn spawn_redis_access_point() -> Result<String, ActorProcessingErr> {
+    pub(crate) async fn spawn_redis_access_point() -> Result<(String, u16), ActorProcessingErr> {
         let host = std::env::var("REDIS_HOST").unwrap_or(String::from("0.0.0.0"));
         let port = std::env::var("REDIS_PORT").unwrap_or(String::from("0"));
 

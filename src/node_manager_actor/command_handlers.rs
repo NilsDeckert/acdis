@@ -56,12 +56,16 @@ fn node_handle_cluster_shards(
         let mut this_shard: Vec<OwnedFrame> = vec![];
         this_shard.push(cluster_slots(vec![hsr.into()]).as_frame());
         this_shard.push("nodes".as_frame());
+        
+        let host: String = format!("{nmr}");
+        let ip: String = nmr.host_ip.clone();
+        let port: String = nmr.host_port.to_string();
 
         let value_map: HashMap<&str, &str> = HashMap::from([
-            ("id", nmr.host.as_ref()),
-            ("endpoint", nmr.host.as_ref()),
-            ("ip", nmr.host.as_ref()),
-            ("port", nmr.host.as_ref()),
+            ("id", host.as_ref()),
+            ("endpoint", ip.as_ref()),
+            ("ip", ip.as_ref()),
+            ("port", port.as_ref()),
         ]);
 
         this_shard.push(map_to_array(value_map));

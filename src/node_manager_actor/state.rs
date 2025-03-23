@@ -21,7 +21,7 @@ pub struct NodeManagerActorState {
     /// The other NodeManagers in this cluster, identified by their keyspace
     pub other_nodes: HashMap<HashSlotRange, NodeManagerRef>,
     /// The port that accepts redis requests
-    pub redis_host: String,
+    pub redis_host: (String, u16),
 }
 
 impl NodeManagerActorState {
@@ -39,7 +39,7 @@ impl NodeManagerActorState {
     pub(crate) fn merge_vec(
         &mut self,
         keyspaces: &Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)>,
-        addresses: &Vec<(&ActorRef<NodeManagerMessage>, String)>,
+        addresses: &Vec<(&ActorRef<NodeManagerMessage>, (String, u16))>,
     ) -> Vec<(HashSlotRange, NodeManagerRef)> {
         let mut merged: Vec<(HashSlotRange, NodeManagerRef)> = Vec::with_capacity(keyspaces.len());
 
@@ -49,7 +49,8 @@ impl NodeManagerActorState {
                     merged.push((
                         keyspace.1.clone(),
                         NodeManagerRef {
-                            host: addr.1.clone(),
+                            host_ip: addr.1.0.clone(),
+                            host_port: addr.1.1.clone(),
                         },
                     ));
                     continue;
@@ -123,10 +124,10 @@ impl NodeManagerActorState {
     ) -> Option<NodeManagerRef> {
         for (keyspace, actor) in &self.other_nodes {
             if keyspace.contains(hashslot) {
-                info!("{}: {:#?} contained in {keyspace}", actor.host, hashslot);
+                info!("{}: {:#?} contained in {keyspace}", actor, hashslot);
                 return Some(actor.clone());
             }
-            info!("{}: {:#?} not in {keyspace}", actor.host, hashslot);
+            info!("{}: {:#?} not in {keyspace}", actor, hashslot);
         }
         None
     }
@@ -151,8 +152,8 @@ impl NodeManagerActorState {
                 let responsible = self.find_responsible_node_by_hashslot(&hashslot);
                 if let Some(responsible) = responsible {
                     let slot = ParseRequestActor::crc16(&key) % 16384;
-                    info!("MOVED {slot} {}", responsible.host);
-                    Ok(format!("MOVED {slot} {}", responsible.host))
+                    info!("MOVED {slot} {}", responsible);
+                    Ok(format!("MOVED {slot} {}", responsible))
                 } else {
                     Err(ActorProcessingErr::from("Unable to find responsible node"))
                 }
@@ -160,7 +161,7 @@ impl NodeManagerActorState {
             _ => {
                 let next = self.other_nodes.values().into_iter().next();
                 if let Some(next) = next {
-                    Ok(format!("MOVED 0 {}", next.host))
+                    Ok(format!("MOVED 0 {}", next))
                 } else {
                     Err(ActorProcessingErr::from("No other node in cluster"))
                 }
@@ -197,14 +198,16 @@ mod tests {
             db_actors: HashMap::new(),
             node_server: pmd_ref,
             other_nodes: HashMap::new(),
-            redis_host: "127.0.0.1:6379".to_string(),
+            redis_host: ("127.0.0.1".to_string(), 6379),
         };
 
         let node_ref_1 = NodeManagerRef {
-            host: "Does not matter".into(),
+            host_ip: "localhost".into(),
+            host_port: 6380,
         };
         let node_ref_2 = NodeManagerRef {
-            host: "Also doesnt matter".into(),
+            host_ip: "Also doesnt matter".into(),
+            host_port: 6381,
         };
 
         state.update_index(vec![

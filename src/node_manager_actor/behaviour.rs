@@ -187,7 +187,8 @@ impl Actor for NodeManagerActor {
                     myself.clone(),
                     own.keyspace.clone(),
                     NodeManagerRef {
-                        host: own.redis_host.clone(),
+                        host_ip: own.redis_host.0.clone(),
+                        host_port: own.redis_host.1
                     },
                 )?;
 
@@ -289,7 +290,8 @@ impl Actor for NodeManagerActor {
                     myself,
                     own.keyspace.clone(),
                     NodeManagerRef {
-                        host: own.redis_host.clone(),
+                        host_ip: own.redis_host.0.clone(),
+                        host_port: own.redis_host.1
                     },
                 )?;
 
@@ -329,8 +331,8 @@ impl Actor for NodeManagerActor {
             QueryAddress(reply) => reply.send(own.redis_host.clone())?,
             IndexUpdate(keyspace, node_manager_ref) => {
                 info!(
-                    "Actor {} updated their keyspace to {keyspace}",
-                    node_manager_ref.host
+                    "Actor {}:{} updated their keyspace to {keyspace}",
+                    node_manager_ref.host_ip, node_manager_ref.host_port
                 );
                 own.update_index(vec![(keyspace, node_manager_ref)])
             }

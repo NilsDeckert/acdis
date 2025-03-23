@@ -1,3 +1,5 @@
+use std::fmt::Display;
+
 pub mod actor;
 pub mod behaviour;
 mod keyspace;
@@ -12,5 +14,12 @@ mod command_handlers;
 #[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NodeManagerRef {
     //pub actor: ActorRef<NodeManagerMessage>,
-    pub host: String,
+    pub host_ip: String,
+    pub host_port: u16
+}
+
+impl Display for NodeManagerRef {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}:{}", self.host_ip, self.host_port)
+    }
 }

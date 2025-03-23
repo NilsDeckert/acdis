@@ -40,6 +40,7 @@ fn node_handle_cluster(
     match subcommand {
         Cluster::SHARDS => node_handle_cluster_shards(reply_to, state),
         Cluster::NODES => node_handle_cluster_nodes(reply_to, state),
+        Cluster::SLOTS => node_handle_cluster_slots(reply_to, state),
         _ => Err(ActorProcessingErr::from(format!(
             "No command handler for CLUSTER {:?}",
             subcommand
@@ -107,6 +108,49 @@ fn node_handle_cluster_nodes(
         reply.push_str(
             format!("{host} {host}@{port},- master - 0 0 1 connected {slot_range}\r\n").as_ref(),
         );
+    }
+
+    NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())
+}
+
+/// ## See
+/// <a href="https://redis.io/docs/latest/commands/cluster-slots/">CLUSTER SLOTS</a>
+///
+/// ```
+/// 1)  1) Start of slot range
+///     2) End of slot range
+///     3)  1) Ip of the node managing the slot range
+///         2) Port of the node
+///         3) ID of the node
+/// ```
+fn node_handle_cluster_slots(
+    reply_to: String,
+    state: &NodeManagerActorState,
+) -> Result<(), ActorProcessingErr> {
+    let mut reply: Vec<OwnedFrame> = vec![];
+
+    let myself = vec![
+        state.keyspace.start.0.as_frame(),
+        state.keyspace.end.0.as_frame(),
+        vec![
+            state.redis_host.0.as_frame(),
+            state.redis_host.1.as_frame(),
+            format!("{}:{}", state.redis_host.0, state.redis_host.1).as_frame(),
+        ]
+        .as_frame(),
+    ];
+    reply.push(myself.as_frame());
+
+    for (hsr, nmr) in &state.other_nodes {
+        let ip: String = nmr.host_ip.to_string();
+        let port: String = nmr.host_port.to_string();
+        let host: String = format!("{nmr}");
+        let this_node = vec![
+            hsr.start.0.as_frame(),
+            hsr.end.0.as_frame(),
+            vec![ip.as_frame(), port.as_frame(), host.as_frame()].as_frame(),
+        ];
+        reply.push(this_node.as_frame());
     }
 
     NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())

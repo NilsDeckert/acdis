@@ -1,5 +1,6 @@
 use crate::hash_slot::MOD;
 use serde::{Deserialize, Serialize};
+use std::fmt::Display;
 use std::ops::{Add, AddAssign, Div, Sub, SubAssign};
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, Hash)]
@@ -8,6 +9,12 @@ pub struct HashSlot(pub u16);
 impl HashSlot {
     pub fn new(key: &str) -> HashSlot {
         key.into()
+    }
+}
+
+impl Display for HashSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 

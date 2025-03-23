@@ -272,12 +272,12 @@ impl Actor for NodeManagerActor {
                 if requested.start == own.keyspace.start && requested.end < own.keyspace.end {
                     // [==requested==|=remaining=]
                     //               ^ New start of our keyspace
-                    own.keyspace.start = requested.end;
+                    own.keyspace.start = requested.end + 1;
                 } else if requested.start > own.keyspace.start && requested.end == own.keyspace.end
                 {
                     // [=remaining=|==requested==]
                     //             ^ New end of our keyspace
-                    own.keyspace.end = requested.start;
+                    own.keyspace.end = requested.start - 1;
                 } else {
                     // [=remaining=|==requested==|=remaining=]
                     panic!("Requested keyspace is not at one end of our keyspace.")
@@ -319,7 +319,6 @@ impl Actor for NodeManagerActor {
                 if let Some(responsible) = own.find_responsible_by_request(&request.request) {
                     responsible.send_message(DBMessage::Request(request))?
                 } else {
-                    info!("We are not responsible!");
                     let moved_error = OwnedFrame::SimpleError {
                         data: own.moved_error(&request.request)?,
                         attributes: None,

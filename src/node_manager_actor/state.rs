@@ -3,7 +3,6 @@ use crate::hash_slot::hash_slot::HashSlot;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
-use crate::parse_actor::parse_request_actor::ParseRequestActor;
 use log::{error, info};
 use ractor::{ActorProcessingErr, ActorRef};
 use ractor_cluster::NodeServerMessage;
@@ -76,7 +75,7 @@ impl NodeManagerActorState {
     ) -> Option<ActorRef<DBMessage>> {
         if !self.keyspace.contains(&hashslot) {
             error!(
-                "Tried to find actor for hash {:#?}, but we only manage {}",
+                "Tried to find actor for hash {:?}, but we only manage {}",
                 &hashslot, self.keyspace
             );
             return None;
@@ -124,7 +123,6 @@ impl NodeManagerActorState {
     ) -> Option<NodeManagerRef> {
         for (keyspace, actor) in &self.other_nodes {
             if keyspace.contains(hashslot) {
-                info!("{}: {:#?} contained in {keyspace}", actor, hashslot);
                 return Some(actor.clone());
             }
             info!("{}: {:#?} not in {keyspace}", actor, hashslot);
@@ -151,7 +149,7 @@ impl NodeManagerActorState {
                 let hashslot = HashSlot::new(key);
                 let responsible = self.find_responsible_node_by_hashslot(&hashslot);
                 if let Some(responsible) = responsible {
-                    let slot = ParseRequestActor::crc16(&key) % 16384;
+                    let slot = HashSlot::new(key);
                     info!("MOVED {slot} {}", responsible);
                     Ok(format!("MOVED {slot} {}", responsible))
                 } else {

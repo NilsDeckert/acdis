@@ -1,5 +1,4 @@
 use crate::db_actor::message::DBRequest;
-use crate::db_actor::AHasher;
 use crate::hash_slot::hash_slot::HashSlot;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
@@ -8,7 +7,6 @@ use ractor::{async_trait, call, cast, pg, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::util::convert::SerializableFrame;
-use std::hash::Hasher;
 
 pub struct ParseRequestActor;
 
@@ -68,11 +66,6 @@ impl Actor for ParseRequestActor {
                     .unwrap();
                 let responsible = ActorRef::from(resp);
                 info!("Request: {:?}", request);
-
-                if let Request::SET { key, .. } = &request {
-                    let hash = ParseRequestActor::hash(&key);
-                    info!("{:#018x}", hash);
-                }
 
                 cast!(
                     responsible,
@@ -172,37 +165,5 @@ impl ParseRequestActor {
                 "No actor responsible for this key",
             ))
         }
-    }
-
-    /// Hash the given key using [`AHasher`]
-    ///
-    /// # Arguments
-    ///
-    /// * `key`: The key to hash
-    ///
-    /// returns: u64 - The hash
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// # use acdis::parse_actor::parse_request_actor::ParseRequestActor;
-    /// # let actor = ParseRequestActor;
-    /// let hash = actor.hash("my_key");
-    /// if (0..0xffaa).contains(hash) {
-    ///     println!("We are responsible for this key.")
-    /// }
-    /// ```
-    pub(crate) fn hash(key: &String) -> u64 {
-        let mut hasher = AHasher::default();
-        hasher.write(key.as_bytes());
-        hasher.finish()
-    }
-
-    /// Return the crc16 of the given key.
-    ///
-    /// In redis cluster, the crc16 is used to determine the associated hash slot.
-    /// Each cluster node is responsible for a subset of the 16384 hash slots.
-    pub(crate) fn crc16(key: &String) -> u16 {
-        crc16::State::<crc16::XMODEM>::calculate(key.as_bytes())
     }
 }

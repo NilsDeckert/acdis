@@ -188,7 +188,7 @@ impl Actor for NodeManagerActor {
                     own.keyspace.clone(),
                     NodeManagerRef {
                         host_ip: own.redis_host.0.clone(),
-                        host_port: own.redis_host.1
+                        host_port: own.redis_host.1,
                     },
                 )?;
 
@@ -291,7 +291,7 @@ impl Actor for NodeManagerActor {
                     own.keyspace.clone(),
                     NodeManagerRef {
                         host_ip: own.redis_host.0.clone(),
-                        host_port: own.redis_host.1
+                        host_port: own.redis_host.1,
                     },
                 )?;
 

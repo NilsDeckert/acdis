@@ -39,6 +39,7 @@ fn node_handle_cluster(
 ) -> Result<(), ActorProcessingErr> {
     match subcommand {
         Cluster::SHARDS => node_handle_cluster_shards(reply_to, state),
+        Cluster::NODES => node_handle_cluster_nodes(reply_to, state),
         _ => Err(ActorProcessingErr::from(format!(
             "No command handler for CLUSTER {:?}",
             subcommand
@@ -56,7 +57,7 @@ fn node_handle_cluster_shards(
         let mut this_shard: Vec<OwnedFrame> = vec![];
         this_shard.push(cluster_slots(vec![hsr.into()]).as_frame());
         this_shard.push("nodes".as_frame());
-        
+
         let host: String = format!("{nmr}");
         let ip: String = nmr.host_ip.clone();
         let port: String = nmr.host_port.to_string();
@@ -70,6 +71,42 @@ fn node_handle_cluster_shards(
 
         this_shard.push(map_to_array(value_map));
         reply.push(this_shard.as_frame());
+    }
+
+    NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())
+}
+
+/// Reply to `CLUSTER NODES` command.
+/// This sends an overview of the nodes in this cluster to the [`crate::tcp_writer_actor::tcp_writer`]
+/// `reply_to`.
+///
+/// ## See
+/// <a href="https://redis.io/docs/latest/commands/cluster-nodes/">CLUSTER NODES</a>
+fn node_handle_cluster_nodes(
+    reply_to: String,
+    state: &NodeManagerActorState,
+) -> Result<(), ActorProcessingErr> {
+    let mut reply: String = String::new();
+
+    // Info for this node
+    let own_host = format!("{}:{}", state.redis_host.0, state.redis_host.1);
+    let own_port = state.redis_host.1.to_string();
+    let own_slots = format!("{}-{}", state.keyspace.start.0, state.keyspace.end.0);
+    reply.push_str(
+        format!(
+            "{own_host} {own_host}@{own_port},- myself,master - 0 0 1 connected {own_slots}\r\n"
+        )
+        .as_ref(),
+    );
+
+    // Info for other nodes in cluster
+    for (hsr, nmr) in &state.other_nodes {
+        let host: String = format!("{nmr}");
+        let port: String = nmr.host_port.to_string();
+        let slot_range = format!("{}-{}", hsr.start.0, hsr.end.0);
+        reply.push_str(
+            format!("{host} {host}@{port},- master - 0 0 1 connected {slot_range}\r\n").as_ref(),
+        );
     }
 
     NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())

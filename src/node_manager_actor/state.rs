@@ -49,8 +49,8 @@ impl NodeManagerActorState {
                     merged.push((
                         keyspace.1.clone(),
                         NodeManagerRef {
-                            host_ip: addr.1.0.clone(),
-                            host_port: addr.1.1.clone(),
+                            host_ip: addr.1 .0.clone(),
+                            host_port: addr.1 .1.clone(),
                         },
                     ));
                     continue;

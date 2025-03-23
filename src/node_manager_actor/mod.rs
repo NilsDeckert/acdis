@@ -15,7 +15,7 @@ mod command_handlers;
 pub struct NodeManagerRef {
     //pub actor: ActorRef<NodeManagerMessage>,
     pub host_ip: String,
-    pub host_port: u16
+    pub host_port: u16,
 }
 
 impl Display for NodeManagerRef {

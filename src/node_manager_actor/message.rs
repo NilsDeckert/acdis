@@ -20,6 +20,6 @@ pub enum NodeManagerMessage {
     Responsible(HashSlot, RpcReplyPort<bool>),
     Forward(DBRequest),
     #[rpc]
-    QueryAddress(RpcReplyPort<String>),
+    QueryAddress(RpcReplyPort<(String, u16)>),
     IndexUpdate(HashSlotRange, NodeManagerRef),
 }

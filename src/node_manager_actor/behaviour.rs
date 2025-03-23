@@ -3,9 +3,10 @@ use crate::db_actor::message::DBMessage;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::hash_slot::{MAX, MIN};
 use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
+use crate::node_manager_actor::command_handlers::{node_handle, node_handles};
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::message::NodeManagerMessage::*;
-use crate::node_manager_actor::state::NodeManageActorState;
+use crate::node_manager_actor::state::NodeManagerActorState;
 use crate::node_manager_actor::NodeManagerRef;
 use async_trait::async_trait;
 use log::{debug, error, info, warn};
@@ -14,13 +15,12 @@ use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor_cluster::NodeServerMessage::GetSessions;
 use rand::Rng;
 use redis_protocol::resp3::types::OwnedFrame;
-use redis_protocol_bridge::util::convert::SerializableFrame;
 use std::collections::HashMap;
 
 #[async_trait]
 impl Actor for NodeManagerActor {
     type Msg = NodeManagerMessage;
-    type State = NodeManageActorState;
+    type State = NodeManagerActorState;
     type Arguments = NodeType;
 
     async fn pre_start(
@@ -88,7 +88,7 @@ impl Actor for NodeManagerActor {
 
         myself.send_message(Init)?;
 
-        Ok(NodeManageActorState {
+        Ok(NodeManagerActorState {
             keyspace: HashSlotRange::from(MIN..MAX),
             db_actors: HashMap::new(),
             node_server: pmd_ref,
@@ -187,7 +187,8 @@ impl Actor for NodeManagerActor {
                     myself.clone(),
                     own.keyspace.clone(),
                     NodeManagerRef {
-                        host: own.redis_host.clone(),
+                        host_ip: own.redis_host.0.clone(),
+                        host_port: own.redis_host.1
                     },
                 )?;
 
@@ -289,7 +290,8 @@ impl Actor for NodeManagerActor {
                     myself,
                     own.keyspace.clone(),
                     NodeManagerRef {
-                        host: own.redis_host.clone(),
+                        host_ip: own.redis_host.0.clone(),
+                        host_port: own.redis_host.1
                     },
                 )?;
 
@@ -309,34 +311,28 @@ impl Actor for NodeManagerActor {
             }
             Responsible(hash, reply) => reply.send(own.keyspace.contains(&hash))?,
             Forward(request) => {
-                // info!("Manager received: {:#?}", request.request);
+                // Some request are handled by the node
+                if node_handles(&request) {
+                    return node_handle(request, own);
+                }
 
-                let responsible = own.find_responsible_by_request(&request.request);
-                if let Some(actor) = responsible {
-                    actor.send_message(DBMessage::Request(request))?
+                if let Some(responsible) = own.find_responsible_by_request(&request.request) {
+                    responsible.send_message(DBMessage::Request(request))?
                 } else {
                     info!("We are not responsible!");
-                    let tcp_writer = pg::get_members(&request.reply_to);
-                    let moved_error = own.moved_error(&request.request)?;
+                    let moved_error = OwnedFrame::SimpleError {
+                        data: own.moved_error(&request.request)?,
+                        attributes: None,
+                    };
 
-                    if let Some(tcp_writer) = tcp_writer.first() {
-                        tcp_writer.send_message(SerializableFrame(OwnedFrame::SimpleError {
-                            data: moved_error,
-                            attributes: None,
-                        }))?
-                    } else {
-                        error!(
-                            "Could not find tcp_writer for address {}",
-                            &request.reply_to
-                        )
-                    }
+                    NodeManagerActor::reply_to(&request.reply_to, moved_error.into())?;
                 }
             }
             QueryAddress(reply) => reply.send(own.redis_host.clone())?,
             IndexUpdate(keyspace, node_manager_ref) => {
                 info!(
-                    "Actor {} updated their keyspace to {keyspace}",
-                    node_manager_ref.host
+                    "Actor {}:{} updated their keyspace to {keyspace}",
+                    node_manager_ref.host_ip, node_manager_ref.host_port
                 );
                 own.update_index(vec![(keyspace, node_manager_ref)])
             }

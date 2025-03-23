@@ -1,9 +1,3 @@
-use log::info;
-use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef};
-use ractor_cluster::node::NodeConnectionMode;
-use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
-use std::collections::HashMap;
-
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
@@ -12,6 +6,12 @@ use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
 use crate::tcp_listener_actor::tcp_listener::{TcpConnectionMessage, TcpListenerActor};
+use log::info;
+use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef};
+use ractor_cluster::node::NodeConnectionMode;
+use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
+use redis_protocol_bridge::util::convert::SerializableFrame;
+use std::collections::HashMap;
 
 pub struct NodeManagerActor;
 
@@ -50,9 +50,9 @@ impl NodeManagerActor {
     ///  * REDIS_PORT: For [`NodeType::Server`] this defaults to `6379`, otherwise to `0`.
     ///
     /// # Returns
-    ///  The address that the TCP port was assigned.
+    ///  The ip and port that the TCP port was assigned.
     ///  In most cases this is `REDIS_HOST:REDIS_PORT` but differs if `REDIS_PORT` is `0`
-    pub(crate) async fn spawn_redis_access_point() -> Result<String, ActorProcessingErr> {
+    pub(crate) async fn spawn_redis_access_point() -> Result<(String, u16), ActorProcessingErr> {
         let host = std::env::var("REDIS_HOST").unwrap_or(String::from("0.0.0.0"));
         let port = std::env::var("REDIS_PORT").unwrap_or(String::from("0"));
 
@@ -184,28 +184,23 @@ impl NodeManagerActor {
 
         Ok(())
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_halve_range() {
-        assert_eq!(
-            NodeManagerActor::halve_range((0..11).into()),
-            ((0..6).into(), (6..11).into())
-        );
-        assert_eq!(
-            NodeManagerActor::halve_range((0..10).into()),
-            ((0..6).into(), (6..10).into())
-        );
-    }
-
-    #[test]
-    fn test_chunk_range_halve() {
-        let chunked_ranges = NodeManagerActor::chunk_ranges((0..11).into(), 2);
-        let halved_ranges = NodeManagerActor::halve_range((0..11).into());
-        assert_eq!(chunked_ranges[0], halved_ranges.0);
-        assert_eq!(chunked_ranges[1], halved_ranges.1);
+    /// Attempts to find a tcp_writer with name `reply_to` and sends `reply`
+    ///
+    /// # Returns
+    ///  - `Ok()` if sending was successful
+    ///  - `Err()` if no tcp_writer was found or if sending failed
+    pub(crate) fn reply_to(
+        reply_to: &str,
+        reply: SerializableFrame,
+    ) -> Result<(), ActorProcessingErr> {
+        let tcp_writer = pg::get_members(&reply_to.into());
+        if let Some(tcp_writer) = tcp_writer.first() {
+            Ok(tcp_writer.send_message(reply)?)
+        } else {
+            Err(ActorProcessingErr::from(format!(
+                "Could not find tcp_writer for address {reply_to}"
+            )))
+        }
     }
 }

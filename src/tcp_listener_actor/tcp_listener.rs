@@ -21,8 +21,8 @@ pub enum TcpConnectionMessage {
         tcp_stream: tokio::net::TcpStream,
         socket_addr: core::net::SocketAddr,
     },
-    /// Ask which address the TCP port uses
-    QueryAddress(RpcReplyPort<String>),
+    /// Ask which IP and port the TCP port uses
+    QueryAddress(RpcReplyPort<(String, u16)>),
 }
 
 /// Extra actor to avoid blocking the [`TcpListenerActor`]s message handling
@@ -67,7 +67,7 @@ impl Actor for CompanionActor {
 #[async_trait]
 impl Actor for TcpListenerActor {
     type Msg = TcpConnectionMessage;
-    type State = String;
+    type State = (String, u16);
     type Arguments = String;
 
     async fn pre_start(
@@ -94,7 +94,7 @@ impl Actor for TcpListenerActor {
                 .expect("Failed to spawn TCP poller");
 
                 info!("Listening on {}", &address);
-                Ok(address.to_string())
+                Ok((address.ip().to_string(), address.port()))
             }
             Err(e) => {
                 if e.kind() == AddrInUse {

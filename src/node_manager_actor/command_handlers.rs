@@ -4,6 +4,8 @@ use crate::node_manager_actor::state::NodeManagerActorState;
 use ractor::ActorProcessingErr;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::cluster::{cluster_slots, Cluster};
+use redis_protocol_bridge::commands::config;
+use redis_protocol_bridge::commands::config::Config;
 use redis_protocol_bridge::commands::parse::Request::*;
 use redis_protocol_bridge::util::convert::{map_to_array, AsFrame};
 use std::collections::HashMap;
@@ -13,6 +15,7 @@ use std::collections::HashMap;
 pub(crate) fn node_handles(request: &DBRequest) -> bool {
     match request.request {
         CLUSTER(_) => true,
+        CONFIG(_) => true,
         _ => false,
     }
 }
@@ -25,6 +28,7 @@ pub(crate) fn node_handle(
 
     match request.request {
         CLUSTER(sub) => node_handle_cluster(sub, request.reply_to, state),
+        CONFIG(sub) => node_handle_config(sub, request.reply_to, state),
         _ => Err(ActorProcessingErr::from(format!(
             "No command handler for {:?}",
             request.request
@@ -154,4 +158,16 @@ fn node_handle_cluster_slots(
     }
 
     NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())
+}
+
+pub fn node_handle_config(
+    sub: Config,
+    reply_to: String,
+    _state: &NodeManagerActorState,
+) -> Result<(), ActorProcessingErr> {
+    let reply = match sub {
+        Config::Get(get) => config::default_handle_config_get(get)?,
+    };
+
+    NodeManagerActor::reply_to(reply_to.as_ref(), reply.into())
 }

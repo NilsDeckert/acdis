@@ -61,7 +61,7 @@ fn node_handle_cluster_shards(
     let ip: String = state.redis_host.0.clone();
     let port: String = state.redis_host.1.to_string();
     let host: String = format!("{}:{}", ip, port);
-    
+
     let myself: Vec<OwnedFrame> = vec![
         cluster_slots(vec![(state.keyspace.start.0, state.keyspace.end.0)]).as_frame(),
         "nodes".as_frame(),
@@ -144,12 +144,20 @@ fn node_handle_cluster_nodes(
 ///     3)  1) Ip of the node managing the slot range
 ///         2) Port of the node
 ///         3) ID of the node
+///         4) Additional Network Info. Empty here.
 /// ```
 fn node_handle_cluster_slots(
     reply_to: String,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: Vec<OwnedFrame> = vec![];
+    
+    // We don't send any additional network info. Redis-server sends an empty array if nothing is
+    // transmitted.
+    let empty_array = OwnedFrame::Array {
+                            data: vec!(),
+                            attributes: None
+                        };
 
     let myself = vec![
         state.keyspace.start.0.as_frame(),
@@ -158,6 +166,7 @@ fn node_handle_cluster_slots(
             state.redis_host.0.as_frame(),
             state.redis_host.1.as_frame(),
             format!("{}:{}", state.redis_host.0, state.redis_host.1).as_frame(),
+            empty_array.clone()
         ]
         .as_frame(),
     ];
@@ -171,6 +180,7 @@ fn node_handle_cluster_slots(
             hsr.start.0.as_frame(),
             hsr.end.0.as_frame(),
             vec![ip.as_frame(), port.as_frame(), host.as_frame()].as_frame(),
+            empty_array.clone()
         ];
         reply.push(this_node.as_frame());
     }

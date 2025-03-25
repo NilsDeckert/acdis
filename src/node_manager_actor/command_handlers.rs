@@ -58,6 +58,24 @@ fn node_handle_cluster_shards(
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: Vec<OwnedFrame> = vec![];
 
+    let ip: String = state.redis_host.0.clone();
+    let port: String = state.redis_host.1.to_string();
+    let host: String = format!("{}:{}", ip, port);
+    
+    let myself: Vec<OwnedFrame> = vec![
+        cluster_slots(vec![(state.keyspace.start.0, state.keyspace.end.0)]).as_frame(),
+        "nodes".as_frame(),
+        map_to_array(
+            HashMap::from([
+                ("id", host.as_ref()),
+                ("endpoint", ip.as_ref()),
+                ("ip", ip.as_ref()),
+                ("port", port.as_ref()),
+            ])
+        )
+    ];
+    reply.push(myself.as_frame());
+
     for (hsr, nmr) in &state.other_nodes {
         let mut this_shard: Vec<OwnedFrame> = vec![];
         this_shard.push(cluster_slots(vec![hsr.into()]).as_frame());

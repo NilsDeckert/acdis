@@ -15,6 +15,7 @@ use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor_cluster::NodeServerMessage::GetSessions;
 use rand::Rng;
 use redis_protocol::resp3::types::OwnedFrame;
+use redis_protocol_bridge::util::convert::AsFrame;
 use std::collections::HashMap;
 
 #[async_trait]
@@ -313,7 +314,18 @@ impl Actor for NodeManagerActor {
             Forward(request) => {
                 // Some request are handled by the node
                 if node_handles(&request) {
-                    return node_handle(request, own);
+                    let reply_to = request.reply_to.clone();
+                    if let Err(e) = node_handle(request, own) {
+                        NodeManagerActor::reply_to(
+                            &reply_to,
+                            OwnedFrame::SimpleError {
+                                data: e.to_string(),
+                                attributes: None,
+                            }.into(),
+                        )?.into()
+                    }
+
+                    return Ok(());
                 }
 
                 if let Some(responsible) = own.find_responsible_by_request(&request.request) {

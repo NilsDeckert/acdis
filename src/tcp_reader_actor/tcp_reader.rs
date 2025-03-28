@@ -76,19 +76,15 @@ impl Actor for TcpReaderActor {
             if !write_stream_to_buf(stream, &mut buf).await {
                 break;
             }
+            
+            let mut start = 0;
+            while let Ok(Some((frame, size))) = decode::complete::decode(&mut buf[start..]) {
+                parse_ref.cast(ParseRequestMessage {
+                    frame: SerializableFrame(frame),
+                    reply_to: stream.peer_addr().unwrap().to_string(),
+                })?;
 
-            let res_op = decode::complete::decode(&mut buf);
-            match res_op {
-                Ok(Some((frame, _size))) => {
-                    // This sends the request to the ParseRequestActor.
-                    // The reply will be received and written onto the stream by `writer`
-                    parse_ref.cast(ParseRequestMessage {
-                        frame: SerializableFrame(frame),
-                        reply_to: stream.peer_addr().unwrap().to_string(),
-                    })?;
-                }
-                Ok(None) => warn!("Received empty command"),
-                Err(e) => error!("Error: {}", e),
+                start += size;
             }
         }
         Ok(myself.stop(Some("Channel was closed.".into())))

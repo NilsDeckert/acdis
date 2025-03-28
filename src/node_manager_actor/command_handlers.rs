@@ -117,18 +117,20 @@ fn node_handle_cluster_nodes(
     let own_slots = format!("{}-{}", state.keyspace.start.0, state.keyspace.end.0);
     reply.push_str(
         format!(
-            "{own_host} {own_host}@{own_port},- myself,master - 0 0 1 connected {own_slots}\r\n"
+            "{own_host} {own_host}@{own_port} myself,master - 0 0 1 connected {own_slots}\r\n"
         )
         .as_ref(),
     );
 
     // Info for other nodes in cluster
+    let mut i = 1;
     for (hsr, nmr) in &state.other_nodes {
+        i += 1;
         let host: String = format!("{nmr}");
         let port: String = nmr.host_port.to_string();
         let slot_range = format!("{}-{}", hsr.start.0, hsr.end.0);
         reply.push_str(
-            format!("{host} {host}@{port},- master - 0 0 1 connected {slot_range}\r\n").as_ref(),
+            format!("{host} {host}@{port} master - 0 0 {i} connected {slot_range}\r\n").as_ref(),
         );
     }
 

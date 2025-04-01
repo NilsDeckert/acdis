@@ -1,5 +1,5 @@
 use crate::parse_actor::parse_request_actor::ParseRequestActor;
-use crate::parse_actor::parse_request_message::ParseRequestMessage;
+use crate::parse_actor::parse_request_message::{ParseRequestFrame, ParseRequestMessage};
 use log::{debug, error, info, warn};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use ractor_cluster::RactorMessage;
@@ -61,11 +61,15 @@ impl Actor for TcpReaderActor {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         debug!("Begin reading from tcp stream...");
-        let (stream, _writer) = state;
+        let (stream, writer) = state;
 
-        let (parse_ref, _parse_handle) = Actor::spawn(None, ParseRequestActor, ())
-            .await
-            .expect("Error spawning ParseRequestActor");
+        let (parse_ref, parse_handle) = Actor::spawn(
+            None,
+            ParseRequestActor,
+            stream.peer_addr().unwrap().to_string(),
+        )
+        .await
+        .expect("Error spawning ParseRequestActor");
 
         loop {
             stream.readable().await.unwrap();
@@ -76,17 +80,22 @@ impl Actor for TcpReaderActor {
             if !write_stream_to_buf(stream, &mut buf).await {
                 break;
             }
-            
+
             let mut start = 0;
             while let Ok(Some((frame, size))) = decode::complete::decode(&mut buf[start..]) {
-                parse_ref.cast(ParseRequestMessage {
-                    frame: SerializableFrame(frame),
-                    reply_to: stream.peer_addr().unwrap().to_string(),
-                })?;
+                parse_ref.cast(ParseRequestMessage::Frame(
+                    ParseRequestFrame {
+                        frame: SerializableFrame(frame),
+                        reply_to: stream.peer_addr().unwrap().to_string(),
+                    })
+                )?;
 
                 start += size;
             }
         }
+        parse_ref.stop(Some("Channel was closed.".into()));
+        parse_handle.await?;
+        writer.stop(Some("Channel was closed.".into()));
         Ok(myself.stop(Some("Channel was closed.".into())))
     }
 }

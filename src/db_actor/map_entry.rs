@@ -3,7 +3,7 @@ use redis_protocol_bridge::util::convert::AsFrame;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Clone)]
 pub enum MapEntry {
     STRING(String),
     USIZE(usize),
@@ -40,15 +40,6 @@ impl From<MapEntry> for OwnedFrame {
 impl From<&MapEntry> for OwnedFrame {
     fn from(item: &MapEntry) -> Self {
         item.to_owned_frame()
-    }
-}
-
-impl Clone for MapEntry {
-    fn clone(&self) -> Self {
-        match self {
-            MapEntry::STRING(a) => MapEntry::STRING(a.clone()),
-            MapEntry::USIZE(a) => MapEntry::USIZE(a.clone()),
-        }
     }
 }
 

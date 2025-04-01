@@ -2,27 +2,81 @@ use crate::db_actor::message::DBRequest;
 use crate::hash_slot::hash_slot::HashSlot;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
+use crate::parse_actor::parse_request_message::ParseRequestMessage::*;
+use crate::parse_actor::subscription::Subscription;
 use log::{debug, error, info, warn};
-use ractor::{async_trait, call, cast, pg, Actor, ActorProcessingErr, ActorRef};
+use ractor::{async_trait, call, cast, pg, registry, Actor, ActorCell, ActorProcessingErr, ActorRef};
+use ractor_cluster::NodeServerMessage;
+use ractor_cluster::NodeServerMessage::SubscribeToEvents;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::util::convert::SerializableFrame;
 
 pub struct ParseRequestActor;
 
+pub struct ParseRequestActorState {
+    writer: ActorCell,
+    node_managers: Vec<ActorRef<NodeManagerMessage>>
+}
+
+impl ParseRequestActorState {
+    /// Given the name of the tcp writer actor, create a state with a reference to the writer actor
+    /// and all node managers.
+    pub fn new(writer: String) -> Self {
+        let reply_to_vec = pg::get_members(&writer);
+        assert_eq!(
+            reply_to_vec.len(),
+            1,
+            "Found less than or more than one actor for {}",
+            writer
+        );
+
+        let writer = reply_to_vec.into_iter().next().unwrap();
+
+        let group_name = "acdis_node_managers".to_string();
+        let manager_cells = pg::get_members(&group_name);
+        let mut node_managers = Vec::with_capacity(manager_cells.len());
+        for cell in manager_cells {
+            let actor_ref = ActorRef::<NodeManagerMessage>::from(cell);
+            node_managers.push(actor_ref);
+        }
+
+        ParseRequestActorState{
+            writer,
+            node_managers
+        }
+    }
+    
+    pub fn update_index(&mut self) {
+
+        let group_name = "acdis_node_managers".to_string();
+        let manager_cells = pg::get_members(&group_name);
+        let mut node_managers = Vec::with_capacity(manager_cells.len());
+        for cell in manager_cells {
+            let actor_ref = ActorRef::<NodeManagerMessage>::from(cell);
+            node_managers.push(actor_ref);
+        }
+        
+        self.node_managers = node_managers;
+    }
+}
+
 #[async_trait]
 impl Actor for ParseRequestActor {
     type Msg = ParseRequestMessage;
-    type State = ();
-    type Arguments = ();
+    type State = ParseRequestActorState;
+    type Arguments = String;
 
     async fn pre_start(
         &self,
-        _myself: ActorRef<Self::Msg>,
-        _args: Self::Arguments,
+        myself: ActorRef<Self::Msg>,
+        writer: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         debug!("Spawning parsing actor...");
-        Ok(())
+        
+        self.subscribe_to_events(myself).await;
+
+        Ok(ParseRequestActorState::new(writer))
     }
 
     /// Given an [`OwnedFrame`], parse it to a [`Request`] and forward that request to a
@@ -31,51 +85,48 @@ impl Actor for ParseRequestActor {
         &self,
         _myself: ActorRef<Self::Msg>,
         message: Self::Msg,
-        _state: &mut Self::State,
+        own: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        debug!("Handling parse request");
-        let query = redis_protocol_bridge::parse_owned_frame(message.frame.0);
-        let request = redis_protocol_bridge::commands::parse::parse(query);
+        match message {
+            Frame(frame) => {
+                debug!("Handling parse request");
+                let query = redis_protocol_bridge::parse_owned_frame(frame.frame.0);
+                let request = redis_protocol_bridge::commands::parse::parse(query);
 
-        let reply_to_vec = pg::get_members(&message.reply_to);
-        assert_eq!(
-            reply_to_vec.len(),
-            1,
-            "Found less than or more than one actor for {}",
-            message.reply_to
-        );
-        let reply_to = reply_to_vec.into_iter().next().unwrap();
+                match request {
+                    Err(err) => {
+                        error!("{}", err.details().to_string());
+                        let err = OwnedFrame::SimpleError {
+                            data: err.details().to_string(),
+                            attributes: None,
+                        };
 
-        match request {
-            Err(err) => {
-                error!("{}", err.details().to_string());
-                let err = OwnedFrame::SimpleError {
-                    data: err.details().to_string(),
-                    attributes: None,
-                };
+                        Ok(own.writer.send_message(SerializableFrame(err))?)
+                    }
 
-                Ok(reply_to.send_message(SerializableFrame(err))?)
-            }
+                    Ok(request) => {
+                        // let responsible = self.find_responsible(&request).await?;
+                        // TODO: Ensure that we send requests to our own node manager
+                        let resp = pg::get_local_members(&String::from("acdis_node_managers"))
+                            .into_iter()
+                            .next()
+                            .unwrap();
+                        let responsible = ActorRef::from(resp);
+                        info!("Request: {:?}", request);
 
-            Ok(request) => {
-                // let responsible = self.find_responsible(&request).await?;
-                // TODO: Ensure that we send requests to our own node manager
-                let resp = pg::get_local_members(&String::from("acdis_node_managers"))
-                    .into_iter()
-                    .next()
-                    .unwrap();
-                let responsible = ActorRef::from(resp);
-                info!("Request: {:?}", request);
-
-                cast!(
+                        cast!(
                     responsible,
                     NodeManagerMessage::Forward(DBRequest {
                         request,
-                        reply_to: message.reply_to
+                        reply_to: frame.reply_to
                     })
                 )?;
-                Ok(())
-            }
+                        Ok(())
+                    }
+                }
+                
+            },
+            UpdateIndex => { Ok(own.update_index()) }
         }
     }
 }
@@ -138,7 +189,7 @@ impl ParseRequestActor {
                 let hashslot = HashSlot::new(key);
                 debug!("{:#?}", hashslot);
 
-                for member in members {
+                for member in members.clone() {
                     let actor_ref = ActorRef::<NodeManagerMessage>::from(member);
 
                     match call!(actor_ref, NodeManagerMessage::Responsible, hashslot) {
@@ -156,7 +207,7 @@ impl ParseRequestActor {
             _ => {}
         }
 
-        if let Some(member) = pg::get_members(&group_name).first() {
+        if let Some(member) = members.first() {
             debug!("Responsible actor: {}", member.get_id().pid());
             Ok(ActorRef::<NodeManagerMessage>::from(member.clone()))
         } else {
@@ -165,5 +216,23 @@ impl ParseRequestActor {
                 "No actor responsible for this key",
             ))
         }
+    }
+
+    /// Subscribe to new nodes joining so we can update our index
+    pub(crate) async fn subscribe_to_events(
+        &self,
+        myself: ActorRef<ParseRequestMessage>,
+    ) {
+        let node_server = registry::where_is(String::from("NodeServer")).expect("Failed to find NodeSever");
+        let node_server_ref = ActorRef::<NodeServerMessage>::from(node_server);
+
+        // Trigger methods when other nodes connect / disconnect
+        cast!(
+            node_server_ref,
+            SubscribeToEvents {
+                id: format!("Subscription {}", myself.get_id()),
+                subscription: Box::new(Subscription(myself))
+            }
+        ).expect("Failed to send Subscription msg")
     }
 }

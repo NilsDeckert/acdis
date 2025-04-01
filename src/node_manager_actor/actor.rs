@@ -2,6 +2,7 @@ use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
 use crate::db_actor::actor::PartitionedHashMap;
 use crate::db_actor::message::DBMessage;
+use crate::db_actor::HashMap;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::node_manager_actor::NodeManagerRef;
@@ -11,7 +12,6 @@ use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef};
 use ractor_cluster::node::NodeConnectionMode;
 use ractor_cluster::{IncomingEncryptionMode, NodeServer, NodeServerMessage};
 use redis_protocol_bridge::util::convert::SerializableFrame;
-use std::collections::HashMap;
 
 pub struct NodeManagerActor;
 
@@ -36,7 +36,7 @@ impl NodeManagerActor {
         );
 
         // Spawn pmd, thus starting server/client
-        let (pmd_ref, _pmd_handler) = Actor::spawn(None, pmd, ())
+        let (pmd_ref, _pmd_handler) = Actor::spawn(Some(String::from("NodeServer")), pmd, ())
             .await
             .expect("Failed to spawn port mapper daemon");
 
@@ -84,7 +84,7 @@ impl NodeManagerActor {
         actors_to_join: u16,
         supervisor: ActorRef<NodeManagerMessage>,
     ) -> HashMap<HashSlotRange, ActorRef<DBMessage>> {
-        let mut ret_map: HashMap<HashSlotRange, ActorRef<DBMessage>> = HashMap::new();
+        let mut ret_map: HashMap<HashSlotRange, ActorRef<DBMessage>> = HashMap::default();
         info!(
             "Spawning {} DB actors for range {}",
             actors_to_join, args.range
@@ -96,7 +96,7 @@ impl NodeManagerActor {
         if args.map.is_some() {
             for range in ranges {
                 initial_maps.push(PartitionedHashMap {
-                    map: HashMap::new(),
+                    map: HashMap::default(),
                     range,
                 })
             }

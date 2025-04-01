@@ -1,5 +1,6 @@
 use crate::db_actor::actor::{DBActorArgs, PartitionedHashMap};
 use crate::db_actor::message::DBMessage;
+use crate::db_actor::HashMap;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::hash_slot::{MAX, MIN};
 use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
@@ -16,7 +17,6 @@ use ractor_cluster::NodeServerMessage::GetSessions;
 use rand::Rng;
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::util::convert::AsFrame;
-use std::collections::HashMap;
 
 #[async_trait]
 impl Actor for NodeManagerActor {
@@ -91,9 +91,9 @@ impl Actor for NodeManagerActor {
 
         Ok(NodeManagerActorState {
             keyspace: HashSlotRange::from(MIN..MAX),
-            db_actors: HashMap::new(),
+            db_actors: HashMap::default(),
             node_server: pmd_ref,
-            other_nodes: HashMap::new(),
+            other_nodes: HashMap::default(),
             redis_host,
         })
     }
@@ -232,7 +232,7 @@ impl Actor for NodeManagerActor {
                 );
 
                 let mut return_map = PartitionedHashMap {
-                    map: HashMap::new(),
+                    map: HashMap::default(),
                     range: requested.clone(),
                 };
 

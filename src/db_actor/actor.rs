@@ -1,7 +1,6 @@
 use crate::db_actor::command_handler::handle_info;
 use crate::db_actor::map_entry::MapEntry;
 use crate::db_actor::message::DBMessage;
-use crate::db_actor::HashMap;
 use crate::hash_slot::hash_slot::HashSlot;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use log::{debug, warn};
@@ -12,6 +11,7 @@ use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{cluster, command, config, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 use serde::{Deserialize, Serialize};
+use crate::db_actor::HashMap;
 
 pub struct DBActor;
 
@@ -181,12 +181,7 @@ impl DBActor {
     ) -> Result<OwnedFrame, RedisProtocolError> {
         debug!("SET: ({}, {})", key, value);
 
-        if !map.in_range(&key) {
-            warn!("This actor is not responsible for key {}", key);
-            Ok("Not responsible".as_frame())
-        } else {
-            map.map.insert(key, value.into());
-            Ok("Ok".as_frame())
-        }
+        map.map.insert(key, value.into());
+        Ok("Ok".as_frame())
     }
 }

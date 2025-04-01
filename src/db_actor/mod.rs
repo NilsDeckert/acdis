@@ -15,10 +15,6 @@ pub mod map_entry;
 pub mod actor;
 mod command_handler;
 
-/// The common hasher
-// pub type AHasher = FxHasher;
-pub type AHasher = std::hash::DefaultHasher;
-
 /// The common hashmap
-//pub type HashMap<K, V> = FxHashMap<K, V>;
-pub type HashMap<K, V> = std::collections::HashMap<K, V>;
+pub type HashMap<K, V> = FxHashMap<K, V>;
+// pub type HashMap<K, V> = std::collections::HashMap<K, V>;

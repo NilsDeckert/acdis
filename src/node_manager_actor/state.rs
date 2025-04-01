@@ -1,4 +1,5 @@
 use crate::db_actor::message::DBMessage;
+use crate::db_actor::HashMap;
 use crate::hash_slot::hash_slot::HashSlot;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;
@@ -7,7 +8,6 @@ use log::{error, info};
 use ractor::{ActorProcessingErr, ActorRef};
 use ractor_cluster::NodeServerMessage;
 use redis_protocol_bridge::commands::parse::Request;
-use std::collections::HashMap;
 
 #[derive(Clone)]
 pub struct NodeManagerActorState {
@@ -193,9 +193,9 @@ mod tests {
 
         let mut state = NodeManagerActorState {
             keyspace: HashSlotRange::from(0..1), // Not relevant
-            db_actors: HashMap::new(),
+            db_actors: HashMap::default(),
             node_server: pmd_ref,
-            other_nodes: HashMap::new(),
+            other_nodes: HashMap::default(),
             redis_host: ("127.0.0.1".to_string(), 6379),
         };
 

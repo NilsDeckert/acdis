@@ -31,7 +31,10 @@ async-channel = { version = "2.3.1" }
 
 [profile.release]
 #debug=1
-#codegen-units = 1
+# When a crate is split into multiple codegen units, LLVM is able to process them in parallel.
+# Increasing parallelism may speed up compile times, but may also produce slower code.
+# Setting this to 1 may improve the performance of generated code, but may be slower to compile.
+codegen-units = 1
 lto = "fat"
 
 [build]

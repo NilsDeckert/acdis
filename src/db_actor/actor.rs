@@ -1,7 +1,7 @@
+use super::state::*;
+
 use crate::db_actor::command_handler::handle_info;
-use crate::db_actor::map_entry::MapEntry;
 use crate::db_actor::message::DBMessage;
-use crate::hash_slot::hash_slot::HashSlot;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use log::{debug, warn};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
@@ -10,22 +10,9 @@ use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{cluster, command, config, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
-use serde::{Deserialize, Serialize};
-use crate::db_actor::HashMap;
+
 
 pub struct DBActor;
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct PartitionedHashMap {
-    pub map: HashMap<String, MapEntry>,
-    pub range: HashSlotRange,
-}
-
-impl PartitionedHashMap {
-    pub fn in_range(&self, key: &str) -> bool {
-        self.range.contains(&HashSlot::from(key))
-    }
-}
 
 pub struct DBActorArgs {
     pub(crate) map: Option<PartitionedHashMap>,
@@ -35,7 +22,7 @@ pub struct DBActorArgs {
 #[async_trait]
 impl Actor for DBActor {
     type Msg = DBMessage;
-    type State = PartitionedHashMap;
+    type State = DBActorState;
     type Arguments = DBActorArgs;
 
     /// Join group of actors
@@ -44,58 +31,50 @@ impl Actor for DBActor {
         myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let map = args.map.unwrap_or(PartitionedHashMap {
-            map: HashMap::default(),
-            range: args.range.clone(),
-        });
+        let map = args.map.unwrap_or(PartitionedHashMap::new(args.range.start, args.range.end));
         let group_name = "acdis".to_string();
 
         ractor::pg::join(group_name.to_owned(), vec![myself.get_cell()]);
 
-        let members = ractor::pg::get_members(&group_name);
-        debug!(
-            "We're one of {} actors in this cluster managing {}",
-            members.len(),
-            args.range
-        );
+        if cfg!(debug_assertions) {
+            let members = ractor::pg::get_members(&group_name);
+            debug!(
+                "We're one of {} actors in this cluster managing {}",
+                members.len(),
+                args.range
+            );
+        }
 
-        Ok(map)
+        Ok(DBActorState::from_partitioned_hashmap(map))
     }
 
     async fn handle(
         &self,
         myself: ActorRef<Self::Msg>,
         message: Self::Msg,
-        map: &mut Self::State,
+        own: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         match message {
             DBMessage::QueryKeyspace(reply) => {
                 debug!("Received keyspace query");
                 if !reply.is_closed() {
-                    reply.send(map.range.clone())?;
+                    reply.send(own.map.range.clone())?;
                 }
                 Ok(())
             }
             DBMessage::Responsible(hash, reply) => {
                 debug!("Received responsibility check");
                 if !reply.is_closed() {
-                    reply.send(map.range.contains(&hash.into()))?
+                    reply.send(own.map.range.contains(&hash.into()))?
                 }
                 Ok(())
             }
             DBMessage::Request(req) => {
                 debug!("Received request");
                 debug!("{:?}", req.request);
-                let reply = self.handle_request(req.request.clone(), map);
+                let reply = self.handle_request(&req.request, &mut own.map);
 
-                let reply_to_vec = ractor::pg::get_members(&req.reply_to);
-                assert_eq!(
-                    reply_to_vec.len(),
-                    1,
-                    "Found less than or more than one actors for {}",
-                    req.reply_to
-                );
-                let reply_to = reply_to_vec.into_iter().next().unwrap();
+                let reply_to = own.get_writer(req.reply_to);
                 debug!("Replying to: {:?}", reply_to);
 
                 match reply {
@@ -123,7 +102,7 @@ impl Actor for DBActor {
             DBMessage::Drain(reply) => {
                 debug!("Received drain request");
                 if !reply.is_closed() {
-                    reply.send(map.map.clone())?;
+                    reply.send(own.map.map.clone())?;
                 }
                 // TODO: Don't accept DB Requests anymore
                 myself.stop(Some(String::from("Received Drain request")));
@@ -136,7 +115,7 @@ impl Actor for DBActor {
 impl DBActor {
     fn handle_request(
         &self,
-        request: Request,
+        request: &Request,
         map: &mut PartitionedHashMap,
     ) -> Result<OwnedFrame, RedisProtocolError> {
         match request {
@@ -156,7 +135,7 @@ impl DBActor {
     }
 
     /// Fetch the value for given `key` from `map`
-    fn get(&self, key: String, map: &PartitionedHashMap) -> Result<OwnedFrame, RedisProtocolError> {
+    fn get(&self, key: &str, map: &PartitionedHashMap) -> Result<OwnedFrame, RedisProtocolError> {
         debug!("GET: {}", key);
 
         if !map.in_range(&key) {
@@ -164,7 +143,7 @@ impl DBActor {
             return Ok(OwnedFrame::Null);
         }
 
-        let value = map.map.get(&key);
+        let value = map.map.get(key);
         if let Some(value) = value {
             Ok(value.into())
         } else {
@@ -175,13 +154,13 @@ impl DBActor {
     /// Set the `value` of `key` in `map`
     fn set(
         &self,
-        key: String,
-        value: String,
+        key: &str,
+        value: &str,
         map: &mut PartitionedHashMap,
     ) -> Result<OwnedFrame, RedisProtocolError> {
         debug!("SET: ({}, {})", key, value);
 
-        map.map.insert(key, value.into());
+        map.map.insert(key.to_string(), value.into());
         Ok("Ok".as_frame())
     }
 }

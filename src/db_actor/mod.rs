@@ -15,6 +15,10 @@ pub mod map_entry;
 pub mod actor;
 mod command_handler;
 
+/// The module contains the HashMap that is maintained by the actor aswell as
+/// a cache to the `TcpWriterActor`s.
+pub mod state;
+
 /// The common hashmap
 pub type HashMap<K, V> = FxHashMap<K, V>;
 // pub type HashMap<K, V> = std::collections::HashMap<K, V>;

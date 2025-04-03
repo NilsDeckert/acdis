@@ -15,7 +15,8 @@ tokio = {version = "1.41.1", features = ["rt-multi-thread", "signal"]}
 log = "0.4.22"
 simplelog = "^0.12.0"
 redis-protocol = { version = "6.0.0", features = ["bytes"] }
-redis-protocol-bridge = { git = "https://github.com/NilsDeckert/redis-protocol-bridge", features = ["serde"] }
+#redis-protocol-bridge = { git = "https://github.com/NilsDeckert/redis-protocol-bridge", features = ["serde"] }
+redis-protocol-bridge = { path = "../10.03 redis-protocol-bridge", features = ["serde"] }
 futures = "0.3.31"
 fxhash = "=0.2.1"
 gethostname = "0.5"
@@ -24,21 +25,22 @@ serde = { version = "1.0", features = ["derive"] }
 rand = "0.8.5"
 crc16 = "0.4.0"
 rangemap = "1.5.1"
+lru = "0.13.0"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }
 async-channel = { version = "2.3.1" }
 
 [profile.release]
-#debug=1
+# debug=1
 # When a crate is split into multiple codegen units, LLVM is able to process them in parallel.
 # Increasing parallelism may speed up compile times, but may also produce slower code.
 # Setting this to 1 may improve the performance of generated code, but may be slower to compile.
 codegen-units = 1
 lto = "fat"
 
-[build]
-#rustflags = ["-C", "symbol-mangling-version=v0"]
+# [build]
+# rustflags = ["-C", "symbol-mangling-version=v0"]
 
 [[bench]]
 name = "ractor_message_passing"

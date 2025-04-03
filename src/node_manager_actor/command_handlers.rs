@@ -21,14 +21,14 @@ pub(crate) fn node_handles(request: &DBRequest) -> bool {
 }
 
 pub(crate) fn node_handle(
-    request: DBRequest,
+    request: &DBRequest,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     assert!(node_handles(&request));
 
-    match request.request {
-        CLUSTER(sub) => node_handle_cluster(sub, request.reply_to, state),
-        CONFIG(sub) => node_handle_config(sub, request.reply_to, state),
+    match &request.request {
+        CLUSTER(sub) => node_handle_cluster(sub, &request.reply_to, state),
+        CONFIG(sub) => node_handle_config(sub, &request.reply_to, state),
         _ => Err(ActorProcessingErr::from(format!(
             "No command handler for {:?}",
             request.request
@@ -37,8 +37,8 @@ pub(crate) fn node_handle(
 }
 
 fn node_handle_cluster(
-    subcommand: Cluster,
-    reply_to: String,
+    subcommand: &Cluster,
+    reply_to: &String,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     match subcommand {
@@ -53,7 +53,7 @@ fn node_handle_cluster(
 }
 
 fn node_handle_cluster_shards(
-    reply_to: String,
+    reply_to: &String,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: Vec<OwnedFrame> = vec![];
@@ -96,7 +96,7 @@ fn node_handle_cluster_shards(
         reply.push(this_shard.as_frame());
     }
 
-    NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())
+    NodeManagerActor::reply_to(reply_to, reply.as_frame().into())
 }
 
 /// Reply to `CLUSTER NODES` command.
@@ -106,7 +106,7 @@ fn node_handle_cluster_shards(
 /// ## See
 /// <a href="https://redis.io/docs/latest/commands/cluster-nodes/">CLUSTER NODES</a>
 fn node_handle_cluster_nodes(
-    reply_to: String,
+    reply_to: &String,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: String = String::new();
@@ -134,7 +134,7 @@ fn node_handle_cluster_nodes(
         );
     }
 
-    NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())
+    NodeManagerActor::reply_to(reply_to, reply.as_frame().into())
 }
 
 /// ## See
@@ -149,7 +149,7 @@ fn node_handle_cluster_nodes(
 ///         4) Additional Network Info. Empty here.
 /// ```
 fn node_handle_cluster_slots(
-    reply_to: String,
+    reply_to: &String,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: Vec<OwnedFrame> = vec![];
@@ -187,17 +187,17 @@ fn node_handle_cluster_slots(
         reply.push(this_node.as_frame());
     }
 
-    NodeManagerActor::reply_to(reply_to.as_ref(), reply.as_frame().into())
+    NodeManagerActor::reply_to(reply_to, reply.as_frame().into())
 }
 
 pub fn node_handle_config(
-    sub: Config,
-    reply_to: String,
+    sub: &Config,
+    reply_to: &String,
     _state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let reply = match sub {
         Config::Get(get) => config::default_handle_config_get(get)?,
     };
 
-    NodeManagerActor::reply_to(reply_to.as_ref(), reply.into())
+    NodeManagerActor::reply_to(reply_to, reply.into())
 }

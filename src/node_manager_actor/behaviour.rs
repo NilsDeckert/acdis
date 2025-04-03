@@ -1,4 +1,4 @@
-use crate::db_actor::actor::{DBActorArgs, PartitionedHashMap};
+use crate::db_actor::{actor::DBActorArgs, state::PartitionedHashMap};
 use crate::db_actor::message::DBMessage;
 use crate::db_actor::HashMap;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
@@ -16,7 +16,6 @@ use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor_cluster::NodeServerMessage::GetSessions;
 use rand::Rng;
 use redis_protocol::resp3::types::OwnedFrame;
-use redis_protocol_bridge::util::convert::AsFrame;
 
 #[async_trait]
 impl Actor for NodeManagerActor {
@@ -314,10 +313,9 @@ impl Actor for NodeManagerActor {
             Forward(request) => {
                 // Some request are handled by the node
                 if node_handles(&request) {
-                    let reply_to = request.reply_to.clone();
-                    if let Err(e) = node_handle(request, own) {
+                    if let Err(e) = node_handle(&request, own) {
                         NodeManagerActor::reply_to(
-                            &reply_to,
+                            &request.reply_to,
                             OwnedFrame::SimpleError {
                                 data: e.to_string(),
                                 attributes: None,

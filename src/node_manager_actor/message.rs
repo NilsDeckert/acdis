@@ -1,4 +1,4 @@
-use crate::db_actor::actor::PartitionedHashMap;
+use crate::db_actor::state::PartitionedHashMap;
 use crate::db_actor::message::DBRequest;
 use crate::hash_slot::hash_slot::HashSlot;
 use crate::hash_slot::hash_slot_range::HashSlotRange;

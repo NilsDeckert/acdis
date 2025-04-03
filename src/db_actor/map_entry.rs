@@ -15,6 +15,12 @@ impl From<String> for MapEntry {
     }
 }
 
+impl From<&str> for MapEntry {
+    fn from(str: &str) -> Self {
+        Self::STRING(str.to_string())
+    }
+}
+
 impl From<usize> for MapEntry {
     fn from(size: usize) -> Self {
         Self::USIZE(size)

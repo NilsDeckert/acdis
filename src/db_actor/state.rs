@@ -1,51 +1,71 @@
-
-use crate::hash_slot::{hash_slot::HashSlot, hash_slot_range::HashSlotRange};
-use crate::db_actor::HashMap;
 use crate::db_actor::map_entry::MapEntry;
+use crate::db_actor::HashMap;
+use crate::hash_slot::{hash_slot::HashSlot, hash_slot_range::HashSlotRange};
 
-use log::info;
+use log::{debug, info};
 use lru::LruCache;
-use std::num::NonZeroUsize;
-use serde::{Deserialize, Serialize};
 use ractor::ActorRef;
 use redis_protocol_bridge::util::convert::SerializableFrame;
+use serde::{Deserialize, Serialize};
+use std::num::NonZeroUsize;
 
-pub(crate) static CACHE_CAP: NonZeroUsize = NonZeroUsize::new(64).expect("CACHE_CAP must not be zero");
+pub(crate) static CACHE_CAP: NonZeroUsize =
+    NonZeroUsize::new(64).expect("CACHE_CAP must not be zero");
 
+#[derive(Debug)]
 pub struct DBActorState {
     pub map: PartitionedHashMap,
-    writer_cache: LruCache<String, ActorRef<SerializableFrame>>
+    writer_cache: LruCache<String, ActorRef<SerializableFrame>>,
+    #[cfg(debug_assertions)]
+    writer_req: u32,
+    #[cfg(debug_assertions)]
+    writer_cache_misses: u32,
 }
 
 impl DBActorState {
+    #[allow(dead_code)]
     pub fn new(start: HashSlot, end: HashSlot) -> Self {
         DBActorState {
             map: PartitionedHashMap::new(start, end),
-            writer_cache: LruCache::new(CACHE_CAP)
+            writer_cache: LruCache::new(CACHE_CAP),
+            #[cfg(debug_assertions)]
+            writer_req: 0,
+            #[cfg(debug_assertions)]
+            writer_cache_misses: 0,
         }
     }
 
     pub fn from_partitioned_hashmap(map: PartitionedHashMap) -> Self {
         DBActorState {
             map,
-            writer_cache: LruCache::new(CACHE_CAP)
+            writer_cache: LruCache::new(CACHE_CAP),
+            #[cfg(debug_assertions)]
+            writer_req: 0,
+            #[cfg(debug_assertions)]
+            writer_cache_misses: 0,
         }
     }
 
     /// Fetches ActorRef from the cache or populates it it's missing.
     pub fn get_writer(&mut self, name: String) -> &ActorRef<SerializableFrame> {
         info!("Looking for {}", name);
-        self.debug_cache();
-        if let Some(_hit) = self.writer_cache.peek(&name) {
-            info!("cache hit")
+        #[cfg(debug_assertions)]
+        {
+            self.writer_req += 1;
+            debug!("Total requests to cache: {}", &self.writer_req);
+            debug!("Cache misses:            {}", &self.writer_cache_misses);
+            debug!(
+                "Cache hits:              {}",
+                (&self.writer_req - &self.writer_cache_misses)
+            );
         }
-        let ret = self.writer_cache.get_or_insert(
-            name.clone(),
-             ||{
-                let a = Self::find_writer(&name);
-                info!("{:?}", &a);
-                a
-            });
+        let ret = self.writer_cache.get_or_insert(name.clone(), || {
+            #[cfg(debug_assertions)]
+            {
+                self.writer_cache_misses += 1;
+            }
+            Self::find_writer(&name)
+        });
         ret
     }
 
@@ -67,14 +87,13 @@ impl DBActorState {
     }
 
     pub(crate) fn debug_cache(&self) {
-        info!("Cap: {:?}", self.writer_cache.cap());
-        info!("Len: {}", self.writer_cache.len());
-        info!("{:?}", self.writer_cache.peek_lru());
-    } 
-    
+        debug!("Cap: {:?}", self.writer_cache.cap());
+        debug!("Len: {}", self.writer_cache.len());
+        debug!("{:?}", self.writer_cache.peek_lru());
+    }
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct PartitionedHashMap {
     pub map: HashMap<String, MapEntry>,
     pub range: HashSlotRange,
@@ -84,7 +103,7 @@ impl PartitionedHashMap {
     pub fn new(start: HashSlot, end: HashSlot) -> Self {
         PartitionedHashMap {
             map: HashMap::default(),
-            range: HashSlotRange::new(start, end)
+            range: HashSlotRange::new(start, end),
         }
     }
 
@@ -92,4 +111,3 @@ impl PartitionedHashMap {
         self.range.contains(&HashSlot::from(key))
     }
 }
-

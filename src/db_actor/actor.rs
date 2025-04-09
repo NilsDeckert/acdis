@@ -11,7 +11,6 @@ use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{cluster, command, config, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 
-
 pub struct DBActor;
 
 pub struct DBActorArgs {
@@ -31,12 +30,15 @@ impl Actor for DBActor {
         myself: ActorRef<Self::Msg>,
         args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        let map = args.map.unwrap_or(PartitionedHashMap::new(args.range.start, args.range.end));
+        let map = args
+            .map
+            .unwrap_or(PartitionedHashMap::new(args.range.start, args.range.end));
         let group_name = "acdis".to_string();
 
         ractor::pg::join(group_name.to_owned(), vec![myself.get_cell()]);
 
-        if cfg!(debug_assertions) {
+        #[cfg(debug_assertions)]
+        {
             let members = ractor::pg::get_members(&group_name);
             debug!(
                 "We're one of {} actors in this cluster managing {}",
@@ -46,6 +48,15 @@ impl Actor for DBActor {
         }
 
         Ok(DBActorState::from_partitioned_hashmap(map))
+    }
+
+    async fn post_stop(
+        &self,
+        _myself: ActorRef<Self::Msg>,
+        state: &mut Self::State,
+    ) -> Result<(), ActorProcessingErr> {
+        debug!("{:?}", state);
+        Ok(())
     }
 
     async fn handle(
@@ -138,9 +149,12 @@ impl DBActor {
     fn get(&self, key: &str, map: &PartitionedHashMap) -> Result<OwnedFrame, RedisProtocolError> {
         debug!("GET: {}", key);
 
-        if !map.in_range(&key) {
-            warn!("This actor is not responsible for key {}", key);
-            return Ok(OwnedFrame::Null);
+        #[cfg(debug_assertions)]
+        {
+            if !map.in_range(&key) {
+                warn!("This actor is not responsible for key {}", key);
+                return Ok(OwnedFrame::Null);
+            }
         }
 
         let value = map.map.get(key);

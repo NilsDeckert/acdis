@@ -26,7 +26,7 @@ fn setup_logging() {
 
     // For release builds, only print warnings and errors
     let level_filter = if cfg!(debug_assertions) {
-        LevelFilter::Info
+        LevelFilter::Debug
     } else {
         LevelFilter::Warn
     };

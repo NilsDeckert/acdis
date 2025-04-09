@@ -65,14 +65,12 @@ fn node_handle_cluster_shards(
     let myself: Vec<OwnedFrame> = vec![
         cluster_slots(vec![(state.keyspace.start.0, state.keyspace.end.0)]).as_frame(),
         "nodes".as_frame(),
-        map_to_array(
-            HashMap::from([
-                ("id", host.as_ref()),
-                ("endpoint", ip.as_ref()),
-                ("ip", ip.as_ref()),
-                ("port", port.as_ref()),
-            ])
-        )
+        map_to_array(HashMap::from([
+            ("id", host.as_ref()),
+            ("endpoint", ip.as_ref()),
+            ("ip", ip.as_ref()),
+            ("port", port.as_ref()),
+        ])),
     ];
     reply.push(myself.as_frame());
 
@@ -116,10 +114,8 @@ fn node_handle_cluster_nodes(
     let own_port = state.redis_host.1.to_string();
     let own_slots = format!("{}-{}", state.keyspace.start.0, state.keyspace.end.0);
     reply.push_str(
-        format!(
-            "{own_host} {own_host}@{own_port} myself,master - 0 0 1 connected {own_slots}\r\n"
-        )
-        .as_ref(),
+        format!("{own_host} {own_host}@{own_port} myself,master - 0 0 1 connected {own_slots}\r\n")
+            .as_ref(),
     );
 
     // Info for other nodes in cluster
@@ -153,13 +149,13 @@ fn node_handle_cluster_slots(
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: Vec<OwnedFrame> = vec![];
-    
+
     // We don't send any additional network info. Redis-server sends an empty array if nothing is
     // transmitted.
     let empty_array = OwnedFrame::Array {
-                            data: vec!(),
-                            attributes: None
-                        };
+        data: vec![],
+        attributes: None,
+    };
 
     let myself = vec![
         state.keyspace.start.0.as_frame(),
@@ -168,7 +164,7 @@ fn node_handle_cluster_slots(
             state.redis_host.0.as_frame(),
             state.redis_host.1.as_frame(),
             format!("{}:{}", state.redis_host.0, state.redis_host.1).as_frame(),
-            empty_array.clone()
+            empty_array.clone(),
         ]
         .as_frame(),
     ];
@@ -182,7 +178,7 @@ fn node_handle_cluster_slots(
             hsr.start.0.as_frame(),
             hsr.end.0.as_frame(),
             vec![ip.as_frame(), port.as_frame(), host.as_frame()].as_frame(),
-            empty_array.clone()
+            empty_array.clone(),
         ];
         reply.push(this_node.as_frame());
     }

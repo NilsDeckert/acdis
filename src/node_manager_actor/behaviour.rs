@@ -1,6 +1,6 @@
-use crate::db_actor::{actor::DBActorArgs, state::PartitionedHashMap};
 use crate::db_actor::message::DBMessage;
 use crate::db_actor::HashMap;
+use crate::db_actor::{actor::DBActorArgs, state::PartitionedHashMap};
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::hash_slot::{MAX, MIN};
 use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
@@ -319,8 +319,10 @@ impl Actor for NodeManagerActor {
                             OwnedFrame::SimpleError {
                                 data: e.to_string(),
                                 attributes: None,
-                            }.into(),
-                        )?.into()
+                            }
+                            .into(),
+                        )?
+                        .into()
                     }
 
                     return Ok(());

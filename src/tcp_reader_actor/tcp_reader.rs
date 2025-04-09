@@ -83,12 +83,10 @@ impl Actor for TcpReaderActor {
 
             let mut start = 0;
             while let Ok(Some((frame, size))) = decode::complete::decode(&mut buf[start..]) {
-                parse_ref.cast(ParseRequestMessage::Frame(
-                    ParseRequestFrame {
-                        frame: SerializableFrame(frame),
-                        reply_to: stream.peer_addr().unwrap().to_string(),
-                    })
-                )?;
+                parse_ref.cast(ParseRequestMessage::Frame(ParseRequestFrame {
+                    frame: SerializableFrame(frame),
+                    reply_to: stream.peer_addr().unwrap().to_string(),
+                }))?;
 
                 start += size;
             }

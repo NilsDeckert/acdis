@@ -3,7 +3,7 @@ use redis_protocol_bridge::util::convert::AsFrame;
 use serde::{Deserialize, Serialize};
 use std::fmt::{Display, Formatter};
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub enum MapEntry {
     STRING(String),
     USIZE(usize),

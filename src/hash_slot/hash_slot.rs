@@ -71,15 +71,16 @@ impl Div<u16> for HashSlot {
 }
 
 impl From<&str> for HashSlot {
-
     /// Hash the given `str` and return a HashSlot.
     /// If the value contains `{` and `}`, only the string in between will be hashed.
     /// See <a href="https://redis.io/docs/latest/operate/oss_and_stack/reference/cluster-spec/#hash-tags">Redis-Cluster specification: Hashtags</a>
     fn from(val: &str) -> Self {
         if let Some(s) = val.find("{") {
             if let Some(e) = val.find("}") {
-                if (s+1) < e /* Ensure Hashtag is not empty */ {
-                    return HashSlot(crc16(val[s+1..e].into()) % MOD)
+                if (s + 1) < e
+                /* Ensure Hashtag is not empty */
+                {
+                    return HashSlot(crc16(val[s + 1..e].into()) % MOD);
                 }
             }
         }

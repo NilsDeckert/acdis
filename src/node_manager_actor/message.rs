@@ -1,5 +1,5 @@
-use crate::db_actor::state::PartitionedHashMap;
 use crate::db_actor::message::DBRequest;
+use crate::db_actor::state::PartitionedHashMap;
 use crate::hash_slot::hash_slot::HashSlot;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::NodeManagerRef;

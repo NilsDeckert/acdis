@@ -21,9 +21,9 @@ pub(crate) struct ParseRequestFrame {
 #[derive(RactorClusterMessage)]
 pub enum ParseRequestMessage {
     Frame(ParseRequestFrame),
-    
+
     /// To avoid querying for all NodeManagers for every request, the
     /// [`crate::parse_actor::parse_request_actor::ParseRequestActor`] 'caches' the list of NodeManagers.
     /// Sending this message prompts the ParseRequestActor to update its index.
-    UpdateIndex
+    UpdateIndex,
 }

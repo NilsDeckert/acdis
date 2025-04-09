@@ -5,7 +5,9 @@ use crate::parse_actor::parse_request_message::ParseRequestMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage::*;
 use crate::parse_actor::subscription::Subscription;
 use log::{debug, error, info, warn};
-use ractor::{async_trait, call, cast, pg, registry, Actor, ActorCell, ActorProcessingErr, ActorRef};
+use ractor::{
+    async_trait, call, cast, pg, registry, Actor, ActorCell, ActorProcessingErr, ActorRef,
+};
 use ractor_cluster::NodeServerMessage;
 use ractor_cluster::NodeServerMessage::SubscribeToEvents;
 use redis_protocol::resp3::types::OwnedFrame;
@@ -16,7 +18,8 @@ pub struct ParseRequestActor;
 
 pub struct ParseRequestActorState {
     writer: ActorCell,
-    node_managers: Vec<ActorRef<NodeManagerMessage>>
+    node_managers: Vec<ActorRef<NodeManagerMessage>>,
+    this_node_manager: ActorRef<NodeManagerMessage>,
 }
 
 impl ParseRequestActorState {
@@ -41,14 +44,18 @@ impl ParseRequestActorState {
             node_managers.push(actor_ref);
         }
 
-        ParseRequestActorState{
+        let local_managers = pg::get_local_members(&group_name);
+        let this_manager_cell = local_managers.into_iter().next().unwrap();
+        let this_node_manager = ActorRef::<NodeManagerMessage>::from(this_manager_cell);
+
+        ParseRequestActorState {
             writer,
-            node_managers
+            node_managers,
+            this_node_manager,
         }
     }
-    
-    pub fn update_index(&mut self) {
 
+    pub fn update_index(&mut self) {
         let group_name = "acdis_node_managers".to_string();
         let manager_cells = pg::get_members(&group_name);
         let mut node_managers = Vec::with_capacity(manager_cells.len());
@@ -56,7 +63,7 @@ impl ParseRequestActorState {
             let actor_ref = ActorRef::<NodeManagerMessage>::from(cell);
             node_managers.push(actor_ref);
         }
-        
+
         self.node_managers = node_managers;
     }
 }
@@ -73,7 +80,7 @@ impl Actor for ParseRequestActor {
         writer: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         debug!("Spawning parsing actor...");
-        
+
         self.subscribe_to_events(myself).await;
 
         Ok(ParseRequestActorState::new(writer))
@@ -105,28 +112,21 @@ impl Actor for ParseRequestActor {
                     }
 
                     Ok(request) => {
-                        // let responsible = self.find_responsible(&request).await?;
-                        // TODO: Ensure that we send requests to our own node manager
-                        let resp = pg::get_local_members(&String::from("acdis_node_managers"))
-                            .into_iter()
-                            .next()
-                            .unwrap();
-                        let responsible = ActorRef::from(resp);
+                        let responsible = &own.this_node_manager;
                         info!("Request: {:?}", request);
 
                         cast!(
-                    responsible,
-                    NodeManagerMessage::Forward(DBRequest {
-                        request,
-                        reply_to: frame.reply_to
-                    })
-                )?;
+                            responsible,
+                            NodeManagerMessage::Forward(DBRequest {
+                                request,
+                                reply_to: frame.reply_to
+                            })
+                        )?;
                         Ok(())
                     }
                 }
-                
-            },
-            UpdateIndex => { Ok(own.update_index()) }
+            }
+            UpdateIndex => Ok(own.update_index()),
         }
     }
 }
@@ -219,11 +219,9 @@ impl ParseRequestActor {
     }
 
     /// Subscribe to new nodes joining so we can update our index
-    pub(crate) async fn subscribe_to_events(
-        &self,
-        myself: ActorRef<ParseRequestMessage>,
-    ) {
-        let node_server = registry::where_is(String::from("NodeServer")).expect("Failed to find NodeSever");
+    pub(crate) async fn subscribe_to_events(&self, myself: ActorRef<ParseRequestMessage>) {
+        let node_server =
+            registry::where_is(String::from("NodeServer")).expect("Failed to find NodeSever");
         let node_server_ref = ActorRef::<NodeServerMessage>::from(node_server);
 
         // Trigger methods when other nodes connect / disconnect
@@ -233,6 +231,7 @@ impl ParseRequestActor {
                 id: format!("Subscription {}", myself.get_id()),
                 subscription: Box::new(Subscription(myself))
             }
-        ).expect("Failed to send Subscription msg")
+        )
+        .expect("Failed to send Subscription msg")
     }
 }

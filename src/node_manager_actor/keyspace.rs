@@ -133,7 +133,7 @@ impl NodeManagerActor {
         let mut ranges: Vec<HashSlotRange> = Vec::with_capacity(chunks as usize);
 
         let mut start = range.start;
-        
+
         for i in 0..chunks {
             let mut end = start + values_per_chunk - 1;
             // If this is the last chunk, make this contain the extra elements

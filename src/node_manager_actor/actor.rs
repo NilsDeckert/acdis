@@ -1,7 +1,7 @@
 use crate::db_actor::actor::DBActor;
 use crate::db_actor::actor::DBActorArgs;
-use crate::db_actor::state::PartitionedHashMap;
 use crate::db_actor::message::DBMessage;
+use crate::db_actor::state::PartitionedHashMap;
 use crate::db_actor::HashMap;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::node_manager_actor::message::NodeManagerMessage;

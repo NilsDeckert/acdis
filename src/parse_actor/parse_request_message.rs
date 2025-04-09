@@ -8,7 +8,7 @@ use redis_protocol_bridge::util::convert::SerializableFrame;
 /// The result of the request encoded in `frame` is sent
 /// directly to `reply_to`.
 #[derive(serde::Serialize, serde::Deserialize)]
-pub(crate) struct ParseRequestFrame {
+pub struct ParseRequestFrame {
     pub frame: SerializableFrame,
     /// Name of the [`ractor::pg`] process group, whose actor should receive the response to this request.
     ///

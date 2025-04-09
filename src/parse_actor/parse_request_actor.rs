@@ -102,7 +102,7 @@ impl Actor for ParseRequestActor {
 
                 match request {
                     Err(err) => {
-                        error!("{}", err.details().to_string());
+                        error!("{}", err.details());
                         let err = OwnedFrame::SimpleError {
                             data: err.details().to_string(),
                             attributes: None,
@@ -126,7 +126,10 @@ impl Actor for ParseRequestActor {
                     }
                 }
             }
-            UpdateIndex => Ok(own.update_index()),
+            UpdateIndex => {
+                own.update_index();
+                Ok(())
+            },
         }
     }
 }

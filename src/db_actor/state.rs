@@ -56,7 +56,7 @@ impl DBActorState {
             debug!("Cache misses:            {}", &self.writer_cache_misses);
             debug!(
                 "Cache hits:              {}",
-                (&self.writer_req - &self.writer_cache_misses)
+                (self.writer_req - self.writer_cache_misses)
             );
         }
         let ret = self.writer_cache.get_or_insert(name.clone(), || {
@@ -86,6 +86,7 @@ impl DBActorState {
         reply_to_vec.into_iter().next().unwrap().into()
     }
 
+    #[allow(dead_code)]
     pub(crate) fn debug_cache(&self) {
         debug!("Cap: {:?}", self.writer_cache.cap());
         debug!("Len: {}", self.writer_cache.len());

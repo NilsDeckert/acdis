@@ -58,7 +58,7 @@ impl Add<u16> for HashSlot {
 impl AddAssign<i32> for HashSlot {
     fn add_assign(&mut self, rhs: i32) {
         self.0 += rhs as u16;
-        self.0 = self.0 % MOD
+        self.0 %= MOD
     }
 }
 

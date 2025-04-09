@@ -13,18 +13,14 @@ use std::collections::HashMap;
 /// Returns true if the request should be handled by the node.
 /// Returns false if it should be handled by a [`db_actor::actor::DBActor`]
 pub(crate) fn node_handles(request: &DBRequest) -> bool {
-    match request.request {
-        CLUSTER(_) => true,
-        CONFIG(_) => true,
-        _ => false,
-    }
+    matches!(request.request, CLUSTER(_) | CONFIG(_))
 }
 
 pub(crate) fn node_handle(
     request: &DBRequest,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
-    assert!(node_handles(&request));
+    assert!(node_handles(request));
 
     match &request.request {
         CLUSTER(sub) => node_handle_cluster(sub, &request.reply_to, state),
@@ -38,7 +34,7 @@ pub(crate) fn node_handle(
 
 fn node_handle_cluster(
     subcommand: &Cluster,
-    reply_to: &String,
+    reply_to: &str,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     match subcommand {
@@ -53,7 +49,7 @@ fn node_handle_cluster(
 }
 
 fn node_handle_cluster_shards(
-    reply_to: &String,
+    reply_to: &str,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: Vec<OwnedFrame> = vec![];
@@ -104,7 +100,7 @@ fn node_handle_cluster_shards(
 /// ## See
 /// <a href="https://redis.io/docs/latest/commands/cluster-nodes/">CLUSTER NODES</a>
 fn node_handle_cluster_nodes(
-    reply_to: &String,
+    reply_to: &str,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: String = String::new();
@@ -145,7 +141,7 @@ fn node_handle_cluster_nodes(
 ///         4) Additional Network Info. Empty here.
 /// ```
 fn node_handle_cluster_slots(
-    reply_to: &String,
+    reply_to: &str,
     state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let mut reply: Vec<OwnedFrame> = vec![];
@@ -188,7 +184,7 @@ fn node_handle_cluster_slots(
 
 pub fn node_handle_config(
     sub: &Config,
-    reply_to: &String,
+    reply_to: &str,
     _state: &NodeManagerActorState,
 ) -> Result<(), ActorProcessingErr> {
     let reply = match sub {

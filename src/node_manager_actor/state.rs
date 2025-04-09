@@ -46,10 +46,10 @@ impl NodeManagerActorState {
             for addr in addresses {
                 if keyspace.0.get_id() == addr.0.get_id() {
                     merged.push((
-                        keyspace.1.clone(),
+                        keyspace.1,
                         NodeManagerRef {
                             host_ip: addr.1 .0.clone(),
-                            host_port: addr.1 .1.clone(),
+                            host_port: addr.1 .1,
                         },
                     ));
                     continue;
@@ -73,7 +73,7 @@ impl NodeManagerActorState {
         &self,
         hashslot: &HashSlot,
     ) -> Option<ActorRef<DBMessage>> {
-        if !self.keyspace.contains(&hashslot) {
+        if !self.keyspace.contains(hashslot) {
             error!(
                 "Tried to find actor for hash {:?}, but we only manage {}",
                 &hashslot, self.keyspace
@@ -113,7 +113,7 @@ impl NodeManagerActorState {
                 self.find_responsible_by_hashslot(&hashslot)
             }
             // Doesn't matter who handles this, take first in list
-            _ => self.db_actors.values().into_iter().next().cloned(),
+            _ => self.db_actors.values().next().cloned(),
         }
     }
 
@@ -130,19 +130,6 @@ impl NodeManagerActorState {
         None
     }
 
-    pub(crate) fn find_responsible_node_by_request(
-        &self,
-        request: &Request,
-    ) -> Option<NodeManagerRef> {
-        match request {
-            Request::GET { key } | Request::SET { key, .. } => {
-                let hashslot = HashSlot::new(key);
-                self.find_responsible_node_by_hashslot(&hashslot)
-            }
-            _ => self.other_nodes.values().into_iter().next().cloned(),
-        }
-    }
-
     pub(crate) fn moved_error(&mut self, request: &Request) -> Result<String, ActorProcessingErr> {
         match request {
             Request::GET { key } | Request::SET { key, .. } => {
@@ -157,7 +144,7 @@ impl NodeManagerActorState {
                 }
             }
             _ => {
-                let next = self.other_nodes.values().into_iter().next();
+                let next = self.other_nodes.values().next();
                 if let Some(next) = next {
                     Ok(format!("MOVED 0 {}", next))
                 } else {

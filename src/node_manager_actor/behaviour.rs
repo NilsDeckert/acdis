@@ -46,7 +46,7 @@ impl Actor for NodeManagerActor {
                 name = String::from("host_node");
 
                 // Use default redis port if nothing else was specified via env variables
-                if let Err(_) = std::env::var("REDIS_PORT") {
+                if std::env::var("REDIS_PORT").is_err() {
                     std::env::set_var("REDIS_PORT", "6379")
                 }
             }
@@ -118,9 +118,9 @@ impl Actor for NodeManagerActor {
 
                 let nodes = pg::get_members(&pg_name);
                 info!("Found {} other nodes.", nodes.len());
-                let actor_refs = nodes
+                let actor_refs: Vec<ActorRef<NodeManagerMessage>> = nodes
                     .into_iter()
-                    .map(|cell| ActorRef::<NodeManagerMessage>::from(cell))
+                    .map(ActorRef::<NodeManagerMessage>::from)
                     .collect();
 
                 let mut keyspaces = Self::query_keyspaces(&actor_refs).await?;
@@ -140,8 +140,8 @@ impl Actor for NodeManagerActor {
                     // TODO: if inheriting fails, maybe try next node
                     let map =
                         call!(donor, AdoptKeyspace, requesting).expect("Failed to adopt keyspace");
-                    let keyspace = map.range.clone();
-                    own.keyspace = keyspace.clone();
+                    let keyspace = map.range;
+                    own.keyspace = keyspace;
 
                     own.db_actors = Self::spawn_db_actors(
                         DBActorArgs {
@@ -185,7 +185,7 @@ impl Actor for NodeManagerActor {
                 // Inform other nodes about our initial keyspace
                 self.send_index_update(
                     myself.clone(),
-                    own.keyspace.clone(),
+                    own.keyspace,
                     NodeManagerRef {
                         host_ip: own.redis_host.0.clone(),
                         host_port: own.redis_host.1,
@@ -197,7 +197,7 @@ impl Actor for NodeManagerActor {
             }
             QueryKeyspace(reply) => {
                 debug!("Received QueryKeyspace");
-                reply.send(own.keyspace.clone())?;
+                reply.send(own.keyspace)?;
             }
             SetKeyspace(range) => {
                 // TODO
@@ -207,7 +207,7 @@ impl Actor for NodeManagerActor {
                     own.db_actors = NodeManagerActor::spawn_db_actors(
                         DBActorArgs {
                             map: None,
-                            range: own.keyspace.clone(),
+                            range: own.keyspace,
                         },
                         8,
                         myself.clone(),
@@ -232,7 +232,7 @@ impl Actor for NodeManagerActor {
 
                 let mut return_map = PartitionedHashMap {
                     map: HashMap::default(),
-                    range: requested.clone(),
+                    range: requested,
                 };
 
                 let mut to_remove = vec![];
@@ -249,7 +249,7 @@ impl Actor for NodeManagerActor {
                         let actor_hashmap = call!(actor, DBMessage::Drain);
                         return_map.map.extend(actor_hashmap.unwrap());
 
-                        to_remove.push(actor_keyspace.clone());
+                        to_remove.push(*actor_keyspace);
                     } else if actor_keyspace.end <= requested.start
                         || actor_keyspace.start >= requested.end
                     {
@@ -288,7 +288,7 @@ impl Actor for NodeManagerActor {
                 // Inform other nodes that our keyspace has changed
                 self.send_index_update(
                     myself,
-                    own.keyspace.clone(),
+                    own.keyspace,
                     NodeManagerRef {
                         host_ip: own.redis_host.0.clone(),
                         host_port: own.redis_host.1,
@@ -322,7 +322,6 @@ impl Actor for NodeManagerActor {
                             }
                             .into(),
                         )?
-                        .into()
                     }
 
                     return Ok(());

@@ -69,7 +69,7 @@ impl Actor for DBActor {
             DBMessage::QueryKeyspace(reply) => {
                 debug!("Received keyspace query");
                 if !reply.is_closed() {
-                    reply.send(own.map.range.clone())?;
+                    reply.send(own.map.range)?;
                 }
                 Ok(())
             }
@@ -151,7 +151,7 @@ impl DBActor {
 
         #[cfg(debug_assertions)]
         {
-            if !map.in_range(&key) {
+            if !map.in_range(key) {
                 warn!("This actor is not responsible for key {}", key);
                 return Ok(OwnedFrame::Null);
             }

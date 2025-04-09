@@ -82,7 +82,7 @@ impl Actor for TcpReaderActor {
             }
 
             let mut start = 0;
-            while let Ok(Some((frame, size))) = decode::complete::decode(&mut buf[start..]) {
+            while let Ok(Some((frame, size))) = decode::complete::decode(&buf[start..]) {
                 parse_ref.cast(ParseRequestMessage::Frame(ParseRequestFrame {
                     frame: SerializableFrame(frame),
                     reply_to: stream.peer_addr().unwrap().to_string(),
@@ -94,7 +94,8 @@ impl Actor for TcpReaderActor {
         parse_ref.stop(Some("Channel was closed.".into()));
         parse_handle.await?;
         writer.stop(Some("Channel was closed.".into()));
-        Ok(myself.stop(Some("Channel was closed.".into())))
+        myself.stop(Some("Channel was closed.".into()));
+        Ok(())
     }
 }
 

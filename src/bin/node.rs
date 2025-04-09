@@ -2,7 +2,6 @@
 use futures::future::join_all;
 use log::{info, warn, Level, LevelFilter};
 use ractor::{call, pg, Actor, ActorCell, ActorRef};
-use ractor_cluster;
 use ractor_cluster::node::NodeConnectionMode;
 use simplelog::{Color, ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode};
 use std::cmp::Ordering;

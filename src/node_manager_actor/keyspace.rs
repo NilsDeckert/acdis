@@ -15,9 +15,9 @@ impl NodeManagerActor {
     ///  - Error:
     ///    - `Err(Box<dyn Error + Send + Sync>)`
     pub(crate) async fn query_keyspaces(
-        actors: &Vec<ActorRef<NodeManagerMessage>>,
+        actors: &[ActorRef<NodeManagerMessage>],
     ) -> Result<Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)>, ActorProcessingErr> {
-        Self::query(&actors[..], QueryKeyspace, None).await
+        Self::query(actors, QueryKeyspace, None).await
     }
 
     /// Send a request to multiple actors and return a list of (Actor, Response) tuples
@@ -88,7 +88,7 @@ impl NodeManagerActor {
                     })
                     .collect();
 
-                Ok(actors.into_iter().zip(responses).collect())
+                Ok(actors.iter().zip(responses).collect())
             }
         }
     }
@@ -111,7 +111,7 @@ impl NodeManagerActor {
     /// If size of range is odd, first half will contain the extra element
     pub(crate) fn halve_range(range: HashSlotRange) -> (HashSlotRange, HashSlotRange) {
         let length = range.len();
-        let half_length = u16::from(length).div_ceil(2);
+        let half_length = length.div_ceil(2);
         let mid = range.start + half_length;
         (
             HashSlotRange::new(range.start, mid - 1),

@@ -91,7 +91,7 @@ impl NodeManagerActor {
         );
 
         let mut initial_maps = vec![];
-        let ranges = NodeManagerActor::chunk_ranges(args.range.clone(), actors_to_join);
+        let ranges = NodeManagerActor::chunk_ranges(args.range, actors_to_join);
 
         if args.map.is_some() {
             for range in ranges {
@@ -112,13 +112,13 @@ impl NodeManagerActor {
             }
 
             for map in initial_maps {
-                let range = map.range.clone();
+                let range = map.range;
                 let (actor_ref, _handle) = Actor::spawn_linked(
                     Some(format!("DBActor {}", range)),
                     DBActor,
                     DBActorArgs {
                         map: Some(map),
-                        range: range.clone(),
+                        range
                     },
                     supervisor.get_cell(),
                 )
@@ -134,7 +134,7 @@ impl NodeManagerActor {
                     DBActor,
                     DBActorArgs {
                         map: None,
-                        range: range.clone(),
+                        range
                     },
                     supervisor.get_cell(),
                 )
@@ -177,7 +177,7 @@ impl NodeManagerActor {
                 continue;
             }
             node.send_message(NodeManagerMessage::IndexUpdate(
-                keyspace.clone(),
+                keyspace,
                 info.clone(),
             ))?;
         }

@@ -90,7 +90,7 @@ impl NodeManagerActor {
             actors_to_join, args.range
         );
 
-        let mut initial_maps = vec![];
+        let mut initial_maps = Vec::with_capacity(actors_to_join.into());
         let ranges = NodeManagerActor::chunk_ranges(args.range, actors_to_join);
 
         if args.map.is_some() {

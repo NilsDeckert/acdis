@@ -300,7 +300,7 @@ impl Actor for NodeManagerActor {
             QueryNodes(reply) => {
                 debug!("Received QueryNodes");
                 let sessions = call!(own.node_server, GetSessions)?;
-                let mut ret = vec![];
+                let mut ret = Vec::with_capacity(sessions.len());
                 for session in sessions.values() {
                     let addr = &session.peer_addr;
                     info!("Connected to: {}", addr);

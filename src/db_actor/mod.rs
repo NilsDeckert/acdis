@@ -20,5 +20,5 @@ mod command_handler;
 pub mod state;
 
 /// The common hashmap
-// pub type HashMap<K, V> = FxHashMap<K, V>;
-pub type HashMap<K, V> = std::collections::HashMap<K, V>;
+pub type HashMap<K, V> = FxHashMap<K, V>;
+// pub type HashMap<K, V> = std::collections::HashMap<K, V>;

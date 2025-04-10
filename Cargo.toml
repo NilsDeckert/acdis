@@ -15,8 +15,8 @@ tokio = {version = "1.41.1", features = ["rt-multi-thread", "signal"]}
 log = "0.4.22"
 simplelog = "^0.12.0"
 redis-protocol = { version = "6.0.0", features = ["bytes"] }
-#redis-protocol-bridge = { git = "https://github.com/NilsDeckert/redis-protocol-bridge", features = ["serde"] }
-redis-protocol-bridge = { path = "../10.03 redis-protocol-bridge", features = ["serde"] }
+redis-protocol-bridge = { git = "https://github.com/NilsDeckert/redis-protocol-bridge", features = ["serde"] }
+# redis-protocol-bridge = { path = "../10.03 redis-protocol-bridge", features = ["serde"] }
 futures = "0.3.31"
 fxhash = "=0.2.1"
 gethostname = "0.5"

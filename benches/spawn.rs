@@ -1,8 +1,7 @@
 use criterion::black_box;
 use criterion::{criterion_group, criterion_main, Criterion};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef, Message};
-use std::sync::mpsc;
-use std::sync::mpsc::Sender;
+use std::thread;
 
 struct BenchActor;
 enum BenchMessage {}
@@ -13,26 +12,23 @@ impl Message for BenchMessage {}
 impl Actor for BenchActor {
     type Msg = BenchMessage;
 
-    type State = Sender<String>;
+    type State = ();
 
-    type Arguments = Sender<String>;
+    type Arguments = ();
 
     async fn pre_start(
         &self,
         _myself: ActorRef<Self::Msg>,
-        args: Self::Arguments,
+        _args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
-        Ok(args)
+        Ok(())
     }
 
     async fn post_start(
         &self,
         _myself: ActorRef<Self::Msg>,
-        state: &mut Self::State,
+        _state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        state
-            .send(String::from("Ping"))
-            .expect("Error sending to channel");
         Ok(())
     }
 
@@ -46,39 +42,49 @@ impl Actor for BenchActor {
     }
 }
 
-async fn spawn_actor() {
-    let (tx, rx) = mpsc::channel();
-
-    let (_actor1, _handle) = Actor::spawn(None, BenchActor, tx)
+async fn spawn_destroy_actor() {
+    let (actor, handle) = Actor::spawn(None, BenchActor, ())
         .await
         .expect("Failed to start actor");
 
-    rx.recv().expect("Failed to receive from channel");
+    actor.stop(None);
+    handle.await.unwrap();
 }
 
-async fn spawn_task() {
-    let (tx, rx) = mpsc::channel();
-    black_box({
-        tokio::spawn(async move {
-            tx.send(String::from("Ping"))
-                .expect("Error sending to channel");
-        });
+async fn spawn_destroy_task() {
+    let handle = tokio::spawn(async {
+        black_box(());
     });
 
-    rx.recv().expect("Failed to receive from channel");
+    handle.await.unwrap();
+}
+
+fn spawn_destroy_thread() {
+
+    let handle = thread::spawn(|| {
+        black_box(());
+    });
+
+    handle.join().unwrap();
 }
 
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("spawning");
-    let rt = tokio::runtime::Runtime::new().unwrap();
 
-    group.bench_function("Spawn actor", |b| {
-        b.to_async(&rt).iter(|| black_box(spawn_actor()));
+    group.bench_function("Spawn & Destroy Thread", |b| {
+        b.iter(|| black_box(spawn_destroy_thread()));
     });
 
-    group.bench_function("Spawn Task", |b| {
-        b.to_async(&rt).iter(|| black_box(spawn_task()));
+    group.bench_function("Spawn & Destroy Task", |b| {
+        let rt = tokio::runtime::Runtime::new().unwrap(); // Not timed
+        b.to_async(&rt).iter(|| black_box(spawn_destroy_task()));
     });
+
+    group.bench_function("Spawn & Destroy Actor", |b| {
+        let rt = tokio::runtime::Runtime::new().unwrap(); // Not timed
+        b.to_async(&rt).iter(|| black_box(spawn_destroy_actor()));
+    });
+
 }
 
 criterion_group!(benches, criterion_benchmark);

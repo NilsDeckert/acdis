@@ -17,6 +17,8 @@ use ractor_cluster::NodeServerMessage::GetSessions;
 use rand::Rng;
 use redis_protocol::resp3::types::OwnedFrame;
 
+const INITIAL_DB_ACTORS: u16 = 16;
+
 #[async_trait]
 impl Actor for NodeManagerActor {
     type Msg = NodeManagerMessage;
@@ -148,7 +150,7 @@ impl Actor for NodeManagerActor {
                             map: Some(map),
                             range: keyspace,
                         },
-                        8,
+                        INITIAL_DB_ACTORS,
                         myself.clone(),
                     )
                     .await;

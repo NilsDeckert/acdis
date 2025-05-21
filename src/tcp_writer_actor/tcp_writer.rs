@@ -18,21 +18,26 @@ pub struct TcpWriterActor;
 impl Actor for TcpWriterActor {
     type Msg = SerializableFrame;
     type State = OwnedWriteHalf;
-    type Arguments = OwnedWriteHalf;
+    type Arguments = (OwnedWriteHalf, String);
 
     async fn pre_start(
         &self,
         myself: ActorRef<Self::Msg>,
-        write_half: Self::Arguments,
+        args: Self::Arguments,
     ) -> Result<Self::State, ActorProcessingErr> {
         // Join process group to facilitate cross-node addressing
-        debug!("Joining pg {}", write_half.peer_addr().unwrap().to_string());
+        // debug!("Joining pg {}", write_half.peer_addr().unwrap().to_string());
+        // ractor::pg::join(
+        //     write_half.peer_addr().unwrap().to_string(),
+        //     vec![myself.get_cell()],
+        // );
+        debug!("Joining pg {}", args.1);
         ractor::pg::join(
-            write_half.peer_addr().unwrap().to_string(),
+            args.1,
             vec![myself.get_cell()],
         );
 
-        Ok(write_half)
+        Ok(args.0)
     }
 
     async fn post_stop(

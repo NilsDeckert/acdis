@@ -1,17 +1,15 @@
 use crate::db_actor::message::DBRequest;
-use crate::hash_slot::hash_slot::HashSlot;
 use crate::node_manager_actor::message::NodeManagerMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage;
 use crate::parse_actor::parse_request_message::ParseRequestMessage::*;
 use crate::parse_actor::subscription::Subscription;
-use log::{debug, error, info, warn};
+use log::{debug, error, info};
 use ractor::{
-    async_trait, call, cast, pg, registry, Actor, ActorCell, ActorProcessingErr, ActorRef,
+    async_trait, cast, pg, registry, Actor, ActorCell, ActorProcessingErr, ActorRef,
 };
 use ractor_cluster::NodeServerMessage;
 use ractor_cluster::NodeServerMessage::SubscribeToEvents;
 use redis_protocol::resp3::types::OwnedFrame;
-use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::util::convert::SerializableFrame;
 
 pub struct ParseRequestActor;
@@ -44,7 +42,10 @@ impl ParseRequestActorState {
             node_managers.push(actor_ref);
         }
 
-        let local_managers = pg::get_local_members(&group_name);
+        let mut local_managers = pg::get_local_members(&group_name);
+        while local_managers.len() < 1 {
+            local_managers = pg::get_local_members(&group_name);
+        }
         let this_manager_cell = local_managers.into_iter().next().unwrap();
         let this_node_manager = ActorRef::<NodeManagerMessage>::from(this_manager_cell);
 
@@ -135,91 +136,6 @@ impl Actor for ParseRequestActor {
 }
 
 impl ParseRequestActor {
-    /// Return the* responsible node manager for a given request.
-    ///
-    /// \*For Requests that concern a specific key, the responsible actor is found by hashing the key.
-    /// Requests like PING can be handled by multiple actors, thus any actor might be returned.
-    ///
-    /// # Arguments
-    ///
-    /// * `request`: [`Request`] that needs to be handled.
-    ///
-    /// returns: Result<ActorRef<NodeManagerMessage>, Box<dyn Error+Send+Sync, Global>>
-    ///
-    /// # Implementation
-    ///
-    /// Currently, this is done somewhat inefficiently by querying every node manager and asking whether it is
-    /// responsible for hash of the given key.
-    /// By querying node managers instead of DBActors we restrict the effort a bit.
-    ///
-    /// Possible ways to improve this include:
-    ///  - Keep a some sort of data structure that maps keys to responsible actors.
-    ///     Subscribe to process group to update that list whenever actors join / leave.
-    ///
-    /// # Examples
-    ///
-    /// ```ignore
-    /// # use ractor::cast;
-    /// # use acdis::db_actor::message::{DBMessage, DBRequest};
-    /// # use acdis::parse_actor::parse_request_message::ParseRequestMessage;
-    /// # use acdis::parse_actor::parse_request_actor::ParseRequestActor;
-    /// # use redis_protocol_bridge::commands::parse::Request;
-    /// # use redis_protocol_bridge::util::convert::SerializableFrame;
-    /// # use redis_protocol::resp3::types::OwnedFrame;
-    /// # let message = ParseRequestMessage{frame: SerializableFrame(OwnedFrame::Null), reply_to: "actor".into()};
-    ///
-    /// let actor = ParseRequestActor;
-    /// let request = Request::GET{ key: String::from("my_key") };
-    /// let responsible = actor.find_responsible(&request).await.unwrap();
-    ///
-    ///
-    /// cast!(
-    ///    responsible,
-    ///    NodeManagerMessage::Forward(
-    ///        DBRequest{request, reply_to: message.reply_to}
-    ///    )
-    ///)?;
-    /// ```
-    async fn find_responsible(
-        &self,
-        request: &Request,
-    ) -> Result<ActorRef<NodeManagerMessage>, ActorProcessingErr> {
-        let group_name = "acdis_node_managers".to_string();
-        let members = pg::get_members(&group_name);
-
-        match request {
-            Request::GET { key } | Request::SET { key, .. } => {
-                let hashslot = HashSlot::new(key);
-                debug!("{:#?}", hashslot);
-
-                for member in members.clone() {
-                    let actor_ref = ActorRef::<NodeManagerMessage>::from(member);
-
-                    match call!(actor_ref, NodeManagerMessage::Responsible, hashslot) {
-                        Ok(responsible) => {
-                            if responsible {
-                                return Ok(actor_ref);
-                            }
-                        }
-                        Err(e) => {
-                            warn!("Error calling node manager: {}", e);
-                        }
-                    }
-                }
-            }
-            _ => {}
-        }
-
-        if let Some(member) = members.first() {
-            debug!("Responsible actor: {}", member.get_id().pid());
-            Ok(ActorRef::<NodeManagerMessage>::from(member.clone()))
-        } else {
-            error!("Couldn't find responsible actor");
-            Err(ActorProcessingErr::from(
-                "No actor responsible for this key",
-            ))
-        }
-    }
 
     /// Subscribe to new nodes joining so we can update our index
     pub(crate) async fn subscribe_to_events(&self, myself: ActorRef<ParseRequestMessage>) {

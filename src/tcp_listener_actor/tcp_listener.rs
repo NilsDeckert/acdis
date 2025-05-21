@@ -9,6 +9,7 @@ use ractor_cluster::RactorMessage;
 use std::io::ErrorKind::AddrInUse;
 use std::process::exit;
 use tokio::net::TcpListener;
+use rand::distributions::{Alphanumeric, DistString};
 
 pub struct TcpListenerActor;
 
@@ -131,10 +132,12 @@ impl Actor for TcpListenerActor {
                 // Split stream into reader and writer to allow for concurrent reading and writing
                 let (reader, writer) = tcp_stream.into_split();
 
+                let identifier: String = Alphanumeric.sample_string(&mut rand::thread_rng(), 8);
+
                 let (write_actor, _write_actor_handle) = Actor::spawn_linked(
                     Some(format!("Stream Writer {}", socket_addr)),
                     TcpWriterActor,
-                    writer,
+                    (writer, identifier.clone()),
                     myself.get_cell(),
                 )
                 .await?;
@@ -145,7 +148,7 @@ impl Actor for TcpListenerActor {
                 let (read_actor, _read_actor_handle) = Actor::spawn_linked(
                     Some(format!("Stream Reader {}", socket_addr)),
                     TcpReaderActor,
-                    (reader, write_actor.clone()),
+                    (reader, write_actor.clone(), identifier),
                     myself.get_cell(),
                 )
                 .await?;

@@ -3,13 +3,15 @@ use super::state::*;
 use crate::db_actor::command_handler::handle_info;
 use crate::db_actor::message::DBMessage;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
-use log::{debug, warn};
 use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{cluster, command, config, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
+
+#[allow(unused_imports)]
+use log::{debug, warn};
 
 pub struct DBActor;
 

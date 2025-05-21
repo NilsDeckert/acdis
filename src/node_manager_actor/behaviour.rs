@@ -128,6 +128,8 @@ impl Actor for NodeManagerActor {
                 let mut keyspaces = Self::query_keyspaces(&actor_refs).await?;
                 keyspaces = Self::sort_actors_by_keyspace(keyspaces).await;
 
+                info!("Sorted actor list: {:#?}", keyspaces);
+
                 let addresses = Self::query(&actor_refs, QueryAddress, None);
 
                 // Adopt half of the largest keyspace managed by another node
@@ -170,7 +172,7 @@ impl Actor for NodeManagerActor {
                             map: None,
                             range: HashSlotRange::from(MIN..MAX),
                         },
-                        8,
+                        INITIAL_DB_ACTORS,
                         myself.clone(),
                     )
                     .await;
@@ -218,6 +220,11 @@ impl Actor for NodeManagerActor {
                 }
             }
             AdoptKeyspace(requested, reply) => {
+
+                if own.db_actors.len() < 2 {
+                    panic!("Asked to give away keyspace, but less than 2 actors remaining")
+                }
+
                 info!(
                     "{} Giving away keyspace {requested}",
                     myself.get_name().unwrap_or(String::from("node_manager"))

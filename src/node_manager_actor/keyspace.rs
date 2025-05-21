@@ -6,6 +6,8 @@ use ractor::concurrency::Duration;
 use ractor::rpc::CallResult;
 use ractor::{ActorProcessingErr, ActorRef, Message, RpcReplyPort};
 
+use std::cmp::Reverse;
+
 impl NodeManagerActor {
     /// Given a list of actors, ask them for their keyspace.
     ///
@@ -103,7 +105,7 @@ impl NodeManagerActor {
     pub(crate) async fn sort_actors_by_keyspace(
         mut keyspaces: Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)>,
     ) -> Vec<(&ActorRef<NodeManagerMessage>, HashSlotRange)> {
-        keyspaces.sort_by_key(|(_id, keyspace)| keyspace.end - keyspace.start);
+        keyspaces.sort_by_key(|(_id, keyspace)| Reverse(keyspace.end - keyspace.start));
         keyspaces
     }
 

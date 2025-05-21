@@ -63,23 +63,6 @@ impl Actor for BenchActor {
 // Benchmarking functions start here
 ////
 
-/// In parallel, send messages to an actor and wait for a reply
-// async fn call_actor(num: u64) -> Duration {
-//     // Preparation outside timed frame
-//     let (actor, handle) = Actor::spawn(None, BenchActor, ()).await.unwrap();
-//     let start = Instant::now();
-//
-//     for _ in 0..num {
-//         actor.call(BenchMessage::Foo, None).await.unwrap();
-//     }
-//
-//     let elapsed = start.elapsed();
-//     actor.stop(None);
-//     handle.await.unwrap();
-//
-//     elapsed
-// }
-
 /// Send messages to an actor without waiting for a reply
 async fn cast_actor(num: u64) -> Duration {
     let (actor, handle) = Actor::spawn(None, BenchActor, ()).await.unwrap();
@@ -102,133 +85,70 @@ fn rust_mpsc(num: u64) -> Duration {
 
     let start = Instant::now();
 
-    for _ in 0..num {
+    black_box(for _ in 0..num {
         tx.send(String::from("Ping")).unwrap();
-    }
+    });
 
-    for _ in 0..num {
+    black_box(for _ in 0..num {
         rx.recv().unwrap();
-    }
+    });
+
     start.elapsed()
 }
-
-// fn send_message_channel_thread(num: u64) -> Duration {
-//     let (tx, rx) = mpsc::channel();
-//
-//     let h = thread::spawn( move || {
-//         for _ in 0..num {
-//             let _ = rx.recv().unwrap();
-//         }
-//     });
-//
-//     let start = Instant::now();
-//
-//     for _ in 0..num {
-//         tx.send(String::from("Hallo")).unwrap();
-//     }
-//
-//     let elapsed = start.elapsed();
-//
-//     h.join().unwrap();
-//
-//     elapsed
-// }
-
-/// In parallel, use a tokio channel to send and receive messages
-// async fn tokio_mpsc_parallel(num: u64) -> Duration {
-//     let (tx, mut rx) = tokio::sync::mpsc::channel(num as usize);
-//
-//     let start = Instant::now();
-//
-//     for _ in 0..num {
-//         let tx2 = tx.clone();
-//         tokio::spawn(async move {
-//             tx2.send(String::from("Ping")).await.unwrap();
-//         });
-//     }
-//
-//     for _ in 0..num {
-//         rx.recv().await.unwrap();
-//     }
-//
-//     let elapsed = start.elapsed();
-//     rx.close();
-//
-//     elapsed
-// }
 
 async fn tokio_mpsc(num: u64) -> Duration {
     let (tx, mut rx) = tokio::sync::mpsc::channel(num as usize);
 
     let start = Instant::now();
 
-    for _ in 0..num {
+    black_box(for _ in 0..num {
         tx.send(String::from("Ping")).await.unwrap();
-    }
+    });
 
-    for _ in 0..num {
+    black_box(for _ in 0..num {
         rx.recv().await.unwrap();
-    }
+    });
 
     let elapsed = start.elapsed();
     rx.close();
     elapsed
 }
 
-// async fn async_channels_parallel_A(num: u64) -> Duration {
-//     // let (tx, rx) = async_channel::unbounded();
-//     // let start = Instant::now();
-//     //
-//     // for _ in 0..num {
-//     //     let tx2 = tx.clone();
-//     //     tokio::spawn(async move {
-//     //         tx2.send(String::from("Ping")).await.unwrap();
-//     //     });
-//     // }
-//     //
-//     // for _ in 0..num {
-//     //     rx.recv().await.unwrap();
-//     // }
-//     //
-//     // let elapsed = start.elapsed();
-//     // rx.close();
-//     // tx.close();
-//     //
-//     // elapsed
-//
-//     let (tx, rx) = async_channel::unbounded();
-//
-//     let h = thread::spawn(async move || {
-//         for _ in 0..num {
-//             let _ = rx.recv().await.unwrap();
-//         }
-//     });
-//
-//     let start = Instant::now();
-//
-//     for _ in 0..num {
-//         tx.send(String::from("Hallo")).await.unwrap();
-//     }
-//
-//     let elapsed = start.elapsed();
-//
-//     h.join().unwrap().await;
-//
-//     elapsed
-//
-// }
+async fn tokio_unbounded_receiver(num: u64) -> Duration {
+    let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+
+    let start = Instant::now();
+
+    black_box(for _ in 0..num {
+        tx.send(String::from("Ping")).unwrap();
+    });
+
+    black_box(for _ in 0..num {
+        rx.recv().await.unwrap();
+    });
+
+    start.elapsed()
+}
 
 async fn async_channels_unbounded(num: u64) -> Duration {
     let (tx, rx) = async_channel::unbounded();
     let start = Instant::now();
 
-    for _ in 0..num {
-        tx.send(String::from("Ping")).await.unwrap();
-    }
+    // for _ in 0..num {
+    //     tx.send(String::from("Ping")).await.unwrap();
+    // };
+    //
+    // for _ in 0..num {
+    //     rx.recv().await.unwrap();
+    // };
 
-    for _ in 0..num {
+    black_box(for _ in 0..num {
+        tx.send(String::from("Ping")).await.unwrap();
+    });
+
+    black_box(for _ in 0..num {
         rx.recv().await.unwrap();
-    }
+    });
 
     let elapsed = start.elapsed();
     tx.close();
@@ -240,27 +160,33 @@ async fn async_channels_unbounded(num: u64) -> Duration {
 fn criterion_benchmark(c: &mut Criterion) {
     let mut group = c.benchmark_group("messages");
 
-    group.bench_function("Cast actors", |b| {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        b.to_async(&rt)
-            .iter_custom(|messages| black_box(cast_actor(messages)));
-    });
-
     group.bench_function("Rust mpsc", |b| {
         b.iter_custom(|messages| black_box(rust_mpsc(messages)))
     });
+    //
+    // group.bench_function("Cast actors", |b| {
+    //     let rt = tokio::runtime::Runtime::new().unwrap();
+    //     b.to_async(&rt)
+    //         .iter_custom(|messages| black_box(cast_actor(messages)));
+    // });
+    //
+    // group.bench_function("async_channels unbounded", |b| {
+    //     let rt = tokio::runtime::Runtime::new().unwrap();
+    //     b.to_async(&rt)
+    //         .iter_custom(|messages| black_box(async_channels_unbounded(messages)))
+    // });
 
-    group.bench_function("async_channels unbounded", |b| {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        b.to_async(&rt)
-            .iter_custom(|messages| black_box(async_channels_unbounded(messages)))
-    });
+    // group.bench_function("Tokio mpsc", |b| {
+    //     let rt = tokio::runtime::Runtime::new().unwrap();
+    //     b.to_async(&rt)
+    //         .iter_custom(|messages| black_box(tokio_mpsc(messages)));
+    // });
 
-    group.bench_function("Tokio mpsc", |b| {
-        let rt = tokio::runtime::Runtime::new().unwrap();
-        b.to_async(&rt)
-            .iter_custom(|messages| black_box(tokio_mpsc(messages)));
-    });
+    // group.bench_function("Tokio unbounded", |b| {
+    //     let rt = tokio::runtime::Runtime::new().unwrap();
+    //     b.to_async(&rt)
+    //         .iter_custom(|messages| black_box(tokio_unbounded_receiver(messages)));
+    // });
 }
 
 criterion_group!(benches, criterion_benchmark);

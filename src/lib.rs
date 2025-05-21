@@ -1,3 +1,5 @@
+// Kept here to easily replace HashMap with this for testing
+#[allow(unused_imports)]
 use fxhash::FxHashMap;
 
 pub mod db_actor;

@@ -6,6 +6,7 @@ use ractor_cluster::node::NodeServerSessionInformation;
 use ractor_cluster::NodeServerMessage::SubscribeToEvents;
 use ractor_cluster::{NodeEventSubscription, NodeServerMessage};
 
+#[allow(dead_code)]
 pub(crate) struct Subscription(pub(crate) ActorRef<NodeManagerMessage>);
 
 impl NodeManagerActor {

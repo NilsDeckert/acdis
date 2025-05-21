@@ -26,8 +26,8 @@ pub struct TcpReaderMessage;
 #[async_trait]
 impl Actor for TcpReaderActor {
     type Msg = TcpReaderMessage;
-    type State = (OwnedReadHalf, ActorRef<SerializableFrame>);
-    type Arguments = (OwnedReadHalf, ActorRef<SerializableFrame>);
+    type State = (OwnedReadHalf, ActorRef<SerializableFrame>, String);
+    type Arguments = (OwnedReadHalf, ActorRef<SerializableFrame>, String);
 
     async fn pre_start(
         &self,
@@ -61,12 +61,12 @@ impl Actor for TcpReaderActor {
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
         debug!("Begin reading from tcp stream...");
-        let (stream, writer) = state;
+        let (stream, writer, identifier) = state;
 
         let (parse_ref, parse_handle) = Actor::spawn(
             None,
             ParseRequestActor,
-            stream.peer_addr().unwrap().to_string(),
+            identifier.clone(),
         )
         .await
         .expect("Error spawning ParseRequestActor");
@@ -85,7 +85,7 @@ impl Actor for TcpReaderActor {
             while let Ok(Some((frame, size))) = decode::complete::decode(&buf[start..]) {
                 parse_ref.cast(ParseRequestMessage::Frame(ParseRequestFrame {
                     frame: SerializableFrame(frame),
-                    reply_to: stream.peer_addr().unwrap().to_string(),
+                    reply_to: identifier.to_string(),
                 }))?;
 
                 start += size;

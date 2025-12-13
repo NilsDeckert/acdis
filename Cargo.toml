@@ -6,11 +6,7 @@ default-run = "acdis"
 
 [dependencies]
 ractor = { version = "0.15.6", features = ["async-trait", "cluster", "blanket_serde"] }
-# ractor = { path = "../ractor/ractor", features = ["async-trait", "cluster", "blanket_serde"] }
-# ractor = { git = "https://github.com/NilsDeckert/ractor", features = ["async-trait", "cluster", "blanket_serde"] }
 ractor_cluster = { version = "0.15.6", features = ["async-trait"] }
-# ractor_cluster = { path = "../ractor/ractor_cluster", features = ["async-trait"] }
-# ractor_cluster = { git = "https://github.com/NilsDeckert/ractor", features = ["async-trait"] }
 tokio = {version = "1.44.2", features = ["rt-multi-thread", "signal"]}
 log = "0.4.22"
 simplelog = "^0.12.0"

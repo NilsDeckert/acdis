@@ -7,7 +7,7 @@ use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
-use redis_protocol_bridge::commands::{cluster, command, config, hello, ping, quit, select};
+use redis_protocol_bridge::commands::{client, cluster, command, config, hello, ping, quit, select};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 
 #[allow(unused_imports)]
@@ -144,6 +144,7 @@ impl DBActor {
             Request::SELECT { .. } => select::default_handle(request),
             Request::QUIT { .. } => quit::default_handle(request),
             Request::CONFIG(_) => config::default_handle(request),
+            Request::CLIENT(_) => client::default_handle(request),
         }
     }
 

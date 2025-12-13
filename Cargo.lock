@@ -1403,7 +1403,7 @@ dependencies = [
 [[package]]
 name = "redis-protocol-bridge"
 version = "0.1.2"
-source = "git+https://github.com/NilsDeckert/redis-protocol-bridge#8e0debf67d74988a44946c796e4a98d947d039be"
+source = "git+https://github.com/NilsDeckert/redis-protocol-bridge#406bc67f228ceed0d94dd1ef534ea92555f6edf5"
 dependencies = [
  "bincode",
  "env_logger",

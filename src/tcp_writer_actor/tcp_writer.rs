@@ -75,6 +75,11 @@ async fn send_tcp_reply(stream: &mut OwnedWriteHalf, reply: OwnedFrame) {
     let mut encoded: Vec<u8> = vec![0u8; reply.encode_len(false)];
     encode::complete::encode(&mut encoded, &reply, false).expect("Failed to encode");
 
+    let t = reply.as_str();
+    if let Some(text) = t {
+        debug!("Reply: {text}");
+    }
+
     stream
         .write_all(&encoded)
         .await

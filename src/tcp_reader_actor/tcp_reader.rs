@@ -8,6 +8,8 @@ use redis_protocol_bridge::util::convert::SerializableFrame;
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::OwnedReadHalf;
 
+const MAX_MSG_LEN: usize = 1024;
+
 /// This actor handles the reading part of a [`tokio::net::TcpStream`].
 ///
 /// It is spawned with a [`OwnedReadHalf`] and the [`crate::tcp_writer_actor`] handling the writing
@@ -76,7 +78,7 @@ impl Actor for TcpReaderActor {
 
             // TODO: Check what happens if we receive != 1 frame
             // Shift this by amount of bytes received
-            let mut buf = [0; 512];
+            let mut buf = [0; MAX_MSG_LEN];
             if !write_stream_to_buf(stream, &mut buf).await {
                 break;
             }
@@ -104,7 +106,7 @@ impl Actor for TcpReaderActor {
 /// ## Returns:
 /// - True: If successful
 /// - False: Otherwise
-async fn write_stream_to_buf(stream: &mut OwnedReadHalf, buf: &mut [u8; 512]) -> bool {
+async fn write_stream_to_buf(stream: &mut OwnedReadHalf, buf: &mut [u8; MAX_MSG_LEN]) -> bool {
     match stream.read(buf).await {
         Ok(0) => {
             warn!("Client closed channel {}", stream.peer_addr().unwrap());

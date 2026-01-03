@@ -49,16 +49,16 @@ impl DBActorState {
     /// Fetches ActorRef from the cache or populates it it's missing.
     pub fn get_writer(&mut self, name: String) -> &ActorRef<SerializableFrame> {
         info!("Looking for {}", name);
-        #[cfg(debug_assertions)]
-        {
-            self.writer_req += 1;
-            debug!("Total requests to cache: {}", &self.writer_req);
-            debug!("Cache misses:            {}", &self.writer_cache_misses);
-            debug!(
-                "Cache hits:              {}",
-                (self.writer_req - self.writer_cache_misses)
-            );
-        }
+        // #[cfg(debug_assertions)]
+        // {
+        //     self.writer_req += 1;
+        //     debug!("Total requests to cache: {}", &self.writer_req);
+        //     debug!("Cache misses:            {}", &self.writer_cache_misses);
+        //     debug!(
+        //         "Cache hits:              {}",
+        //         (self.writer_req - self.writer_cache_misses)
+        //     );
+        // }
         let ret = self.writer_cache.get_or_insert(name.clone(), || {
             #[cfg(debug_assertions)]
             {

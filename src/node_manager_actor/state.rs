@@ -112,6 +112,11 @@ impl NodeManagerActorState {
                 let hashslot = HashSlot::new(key);
                 self.find_responsible_by_hashslot(&hashslot)
             }
+            Request::DEL { keys } => {
+                // TODO: This only checks the first key, but should check all
+                let hashslot = HashSlot::new(keys[0].as_str());
+                self.find_responsible_by_hashslot(&hashslot)
+            }
             // Doesn't matter who handles this, take first in list
             _ => self.db_actors.values().next().cloned(),
         }

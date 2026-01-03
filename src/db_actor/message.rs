@@ -6,7 +6,7 @@ use ractor_cluster::RactorClusterMessage;
 use redis_protocol_bridge::commands::parse::Request;
 
 // #[derive(serde::Serialize, serde::Deserialize, RactorClusterMessage)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize, Clone)]
 pub struct DBRequest {
     pub request: Request,
     pub reply_to: String,

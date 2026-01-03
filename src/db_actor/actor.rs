@@ -7,7 +7,9 @@ use ractor::{async_trait, Actor, ActorProcessingErr, ActorRef};
 use redis_protocol::error::{RedisProtocolError, RedisProtocolErrorKind};
 use redis_protocol::resp3::types::OwnedFrame;
 use redis_protocol_bridge::commands::parse::Request;
-use redis_protocol_bridge::commands::{client, cluster, command, config, hello, ping, quit, select};
+use redis_protocol_bridge::commands::{
+    client, cluster, command, config, hello, ping, quit, select,
+};
 use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
 
 #[allow(unused_imports)]
@@ -135,6 +137,7 @@ impl DBActor {
             /* Handle requests with proper implementations */
             Request::GET { key } => self.get(key, map),
             Request::SET { key, value } => self.set(key, value, map),
+            Request::DEL { keys } => self.del(keys, map),
             Request::CLUSTER { .. } => cluster::default_handle(request), //TODO
             /* Mock reply using default handlers. TODO */
             Request::HELLO { .. } => hello::default_handle(request),
@@ -179,5 +182,25 @@ impl DBActor {
 
         map.map.insert(key.to_string(), value.into());
         Ok("Ok".as_frame())
+    }
+
+    /// Delete the `keys` from `map`
+    fn del(
+        &self,
+        keys: &Vec<String>,
+        map: &mut PartitionedHashMap,
+    ) -> Result<OwnedFrame, RedisProtocolError> {
+        let mut count = 0;
+        let mut _not_found = vec![];
+        for key in keys {
+            let a = map.map.remove(key.as_str());
+            if let Some(_) = a {
+                count += 1;
+            } else {
+                _not_found.push(key.clone());
+            }
+        }
+
+        Ok(count.as_frame())
     }
 }

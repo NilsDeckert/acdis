@@ -10,7 +10,7 @@ use redis_protocol_bridge::commands::parse::Request;
 use redis_protocol_bridge::commands::{
     client, cluster, command, config, hello, ping, quit, select,
 };
-use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame};
+use redis_protocol_bridge::util::convert::{AsFrame, SerializableFrame, reply_ok};
 
 #[allow(unused_imports)]
 use log::{debug, warn};
@@ -181,7 +181,7 @@ impl DBActor {
         debug!("SET: ({}, {})", key, value);
 
         map.map.insert(key.to_string(), value.into());
-        Ok("Ok".as_frame())
+        Ok(reply_ok())
     }
 
     /// Delete the `keys` from `map`

@@ -8,7 +8,7 @@ use redis_protocol_bridge::util::convert::SerializableFrame;
 use tokio::io::AsyncReadExt;
 use tokio::net::tcp::OwnedReadHalf;
 
-const MAX_MSG_LEN: usize = 1024;
+const MAX_MSG_LEN: usize = 2048;
 
 /// This actor handles the reading part of a [`tokio::net::TcpStream`].
 ///

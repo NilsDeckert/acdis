@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # Check if a valid number is provided
-if [[ -z "$1" || "$1" -lt 1 || -z $2 ]]; then
-  echo "Usage: $0 <number of total processes> <number_of_threads per process>"
+if [[ -z "$1" || "$1" -lt 1 ]]; then
+  echo "Usage: $0 <number of total processes> [<number_of_threads per process>]"
   exit 1
 fi
 
@@ -10,6 +10,14 @@ n="$1"
 threads="$2"
 pids=()
 running=true
+
+if [[ -z "$threads" ]]; then
+  THREAD_FLAG=""
+else
+  THREAD_FLAG="TOKIO_WORKER_THREADS=$threads"
+fi
+
+echo "THREAD_FLAG: $THREAD_FLAG"
 
 # Handle Ctrl+C to terminate all child processes
 cleanup() {
@@ -39,13 +47,13 @@ cargo build --release
 cargo build --release --bin node
 
 # Start the first main process
-TOKIO_WORKER_THREADS=$threads cargo run --release &
+$THREAD_FLAG cargo run --release &
 pids+=($!)
 
 # Start the remaining node processes
 for ((i=1; i<n; i++)); do
   sleep 3
-  TOKIO_WORKER_THREADS=$threads cargo run --release --bin node &
+  $THREAD_FLAG cargo run --release --bin node &
   pids+=($!)
 done
 

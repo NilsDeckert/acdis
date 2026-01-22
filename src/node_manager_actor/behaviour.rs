@@ -1,7 +1,6 @@
-use crate::db_actor::message::{DBMessage, DBRequest};
+use crate::db_actor::message::DBMessage;
 use crate::db_actor::HashMap;
 use crate::db_actor::{actor::DBActorArgs, state::PartitionedHashMap};
-use crate::hash_slot::hash_slot::HashSlot;
 use crate::hash_slot::hash_slot_range::HashSlotRange;
 use crate::hash_slot::{MAX, MIN};
 use crate::node_manager_actor::actor::{NodeManagerActor, NodeType};
@@ -17,7 +16,6 @@ use ractor::{call, pg, Actor, ActorProcessingErr, ActorRef, SupervisionEvent};
 use ractor_cluster::NodeServerMessage::GetSessions;
 use rand::Rng;
 use redis_protocol::resp3::types::OwnedFrame;
-use redis_protocol_bridge::commands::parse::Request;
 
 const INITIAL_DB_ACTORS: u16 = 16;
 

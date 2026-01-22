@@ -28,8 +28,7 @@ impl ParseRequestActorState {
         assert_eq!(
             reply_to_vec.len(),
             1,
-            "Found less than or more than one actor for {}",
-            writer
+            "Found less than or more than one actor for {writer}"
         );
 
         let writer = reply_to_vec.into_iter().next().unwrap();
@@ -114,7 +113,7 @@ impl Actor for ParseRequestActor {
 
                     Ok(request) => {
                         let responsible = &own.this_node_manager;
-                        info!("Request: {:?}", request);
+                        info!("Request: {request:?}");
 
                         cast!(
                             responsible,

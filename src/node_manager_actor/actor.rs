@@ -59,7 +59,7 @@ impl NodeManagerActor {
         let (tcp_actor, _tcp_handler) = Actor::spawn(
             Some(String::from("TcpListenerActor")),
             TcpListenerActor,
-            format!("{}:{}", host, port),
+            format!("{host}:{port}"),
         )
         .await
         .expect("Failed to spawn tcp listener actor");
@@ -114,7 +114,7 @@ impl NodeManagerActor {
             for map in initial_maps {
                 let range = map.range;
                 let (actor_ref, _handle) = Actor::spawn_linked(
-                    Some(format!("DBActor {}", range)),
+                    Some(format!("DBActor {range}")),
                     DBActor,
                     DBActorArgs {
                         map: Some(map),
@@ -130,7 +130,7 @@ impl NodeManagerActor {
         } else {
             for range in ranges {
                 let (actor_ref, _handle) = Actor::spawn_linked(
-                    Some(format!("DBActor {}", range)),
+                    Some(format!("DBActor {range}")),
                     DBActor,
                     DBActorArgs {
                         map: None,

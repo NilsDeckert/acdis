@@ -53,7 +53,7 @@ impl Actor for CompanionActor {
 
         loop {
             let (tcp_stream, socket_addr) = listener.accept().await?;
-            info!("Accepting connection from: {}", socket_addr);
+            info!("Accepting connection from: {socket_addr}");
             cast!(
                 send_to,
                 TcpConnectionMessage::NewConnection {
@@ -135,7 +135,7 @@ impl Actor for TcpListenerActor {
                 let identifier: String = Alphanumeric.sample_string(&mut rand::thread_rng(), 8);
 
                 let (write_actor, _write_actor_handle) = Actor::spawn_linked(
-                    Some(format!("Stream Writer {}", socket_addr)),
+                    Some(format!("Stream Writer {socket_addr}")),
                     TcpWriterActor,
                     (writer, identifier.clone()),
                     myself.get_cell(),
@@ -146,7 +146,7 @@ impl Actor for TcpListenerActor {
                 // is alive and working until the client disconnects. -> It is okay to spawn a fresh actor
                 // for each client connection.
                 let (read_actor, _read_actor_handle) = Actor::spawn_linked(
-                    Some(format!("Stream Reader {}", socket_addr)),
+                    Some(format!("Stream Reader {socket_addr}")),
                     TcpReaderActor,
                     (reader, write_actor.clone(), identifier),
                     myself.get_cell(),

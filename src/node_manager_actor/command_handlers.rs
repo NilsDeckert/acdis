@@ -42,8 +42,7 @@ fn node_handle_cluster(
         Cluster::NODES => node_handle_cluster_nodes(reply_to, state),
         Cluster::SLOTS => node_handle_cluster_slots(reply_to, state),
         _ => Err(ActorProcessingErr::from(format!(
-            "No command handler for CLUSTER {:?}",
-            subcommand
+            "No command handler for CLUSTER {subcommand:?}"
         ))),
     }
 }
@@ -56,7 +55,7 @@ fn node_handle_cluster_shards(
 
     let ip: String = state.redis_host.0.clone();
     let port: String = state.redis_host.1.to_string();
-    let host: String = format!("{}:{}", ip, port);
+    let host: String = format!("{ip}:{port}");
 
     let myself: Vec<OwnedFrame> = vec![
         cluster_slots(vec![(state.keyspace.start.0, state.keyspace.end.0)]).as_frame(),

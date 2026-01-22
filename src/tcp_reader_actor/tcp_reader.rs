@@ -113,7 +113,7 @@ async fn write_stream_to_buf(stream: &mut OwnedReadHalf, buf: &mut [u8; MAX_MSG_
         }
         Ok(_) => return true,
         Err(e) => {
-            error!("Error reading from socket: {}", e);
+            error!("Error reading from socket: {e}");
         }
     };
     false

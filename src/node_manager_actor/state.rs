@@ -89,7 +89,7 @@ impl NodeManagerActorState {
 
         error!("No actor responsible for {:?}", &hashslot);
         for keyspace in self.db_actors.keys() {
-            error!(" - {}", keyspace)
+            error!(" - {keyspace}")
         }
         None
     }
@@ -130,7 +130,7 @@ impl NodeManagerActorState {
             if keyspace.contains(hashslot) {
                 return Some(actor.clone());
             }
-            info!("{}: {:#?} not in {keyspace}", actor, hashslot);
+            info!("{actor}: {hashslot:#?} not in {keyspace}");
         }
         None
     }
@@ -142,8 +142,8 @@ impl NodeManagerActorState {
                 let responsible = self.find_responsible_node_by_hashslot(&hashslot);
                 if let Some(responsible) = responsible {
                     let slot = HashSlot::new(key);
-                    info!("MOVED {slot} {}", responsible);
-                    Ok(format!("MOVED {slot} {}", responsible))
+                    info!("MOVED {slot} {responsible}");
+                    Ok(format!("MOVED {slot} {responsible}"))
                 } else {
                     Err(ActorProcessingErr::from("Unable to find responsible node"))
                 }
@@ -151,7 +151,7 @@ impl NodeManagerActorState {
             _ => {
                 let next = self.other_nodes.values().next();
                 if let Some(next) = next {
-                    Ok(format!("MOVED 0 {}", next))
+                    Ok(format!("MOVED 0 {next}"))
                 } else {
                     Err(ActorProcessingErr::from("No other node in cluster"))
                 }

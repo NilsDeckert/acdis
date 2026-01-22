@@ -48,7 +48,7 @@ impl DBActorState {
 
     /// Fetches ActorRef from the cache or populates it it's missing.
     pub fn get_writer(&mut self, name: String) -> &ActorRef<SerializableFrame> {
-        info!("Looking for {}", name);
+        info!("Looking for {name}");
         // #[cfg(debug_assertions)]
         // {
         //     self.writer_req += 1;
@@ -80,8 +80,7 @@ impl DBActorState {
         assert_eq!(
             reply_to_vec.len(),
             1,
-            "Found less than or more than one actors for {}",
-            name
+            "Found less than or more than one actors for {name}"
         );
         reply_to_vec.into_iter().next().unwrap().into()
     }

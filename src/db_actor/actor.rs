@@ -59,7 +59,7 @@ impl Actor for DBActor {
         _myself: ActorRef<Self::Msg>,
         state: &mut Self::State,
     ) -> Result<(), ActorProcessingErr> {
-        debug!("{:?}", state);
+        debug!("{state:?}");
         Ok(())
     }
 
@@ -90,7 +90,7 @@ impl Actor for DBActor {
                 let reply = self.handle_request(&req.request, &mut own.map);
 
                 let reply_to = own.get_writer(req.reply_to);
-                debug!("Replying to: {:?}", reply_to);
+                debug!("Replying to: {reply_to:?}");
 
                 match reply {
                     Ok(frame) => {
@@ -153,12 +153,12 @@ impl DBActor {
 
     /// Fetch the value for given `key` from `map`
     fn get(&self, key: &str, map: &PartitionedHashMap) -> Result<OwnedFrame, RedisProtocolError> {
-        debug!("GET: {}", key);
+        debug!("GET: {key}");
 
         #[cfg(debug_assertions)]
         {
             if !map.in_range(key) {
-                warn!("This actor is not responsible for key {}", key);
+                warn!("This actor is not responsible for key {key}");
                 return Ok(OwnedFrame::Null);
             }
         }
@@ -178,7 +178,7 @@ impl DBActor {
         value: &str,
         map: &mut PartitionedHashMap,
     ) -> Result<OwnedFrame, RedisProtocolError> {
-        debug!("SET: ({}, {})", key, value);
+        debug!("SET: ({key}, {value})");
 
         map.map.insert(key.to_string(), value.into());
         Ok(reply_ok())

@@ -69,7 +69,7 @@ impl Actor for NodeManagerActor {
             loop {
                 match ractor_cluster::client_connect(
                     &pmd_ref,
-                    format!("{}:{}", cluster_host_address, cluster_host_port),
+                    format!("{cluster_host_address}:{cluster_host_port}"),
                 )
                 .await
                 {
@@ -79,7 +79,7 @@ impl Actor for NodeManagerActor {
                         break;
                     }
                     Err(e) => {
-                        error!("Failed to connect to node server: {}", e);
+                        error!("Failed to connect to node server: {e}");
                         tokio::time::sleep(std::time::Duration::from_secs(10)).await;
                     }
                 }
@@ -128,7 +128,7 @@ impl Actor for NodeManagerActor {
                 let mut keyspaces = Self::query_keyspaces(&actor_refs).await?;
                 keyspaces = Self::sort_actors_by_keyspace(keyspaces).await;
 
-                info!("Sorted actor list: {:#?}", keyspaces);
+                info!("Sorted actor list: {keyspaces:#?}");
 
                 let addresses = Self::query(&actor_refs, QueryAddress, None);
 
@@ -183,7 +183,7 @@ impl Actor for NodeManagerActor {
 
                 // TODO: Remove
                 for (keyspace, info) in &own.other_nodes {
-                    println!("- {keyspace}: {:#?}", info)
+                    println!("- {keyspace}: {info:#?}")
                 }
 
                 // Inform other nodes about our initial keyspace
@@ -253,7 +253,7 @@ impl Actor for NodeManagerActor {
                         && actor_keyspace.end <= requested.end
                     {
                         // ""Kill"" actor and fetch HashMap
-                        info!("'Killing' actor {:?} for keyspace {actor_keyspace}", actor);
+                        info!("'Killing' actor {actor:?} for keyspace {actor_keyspace}");
                         let actor_hashmap = call!(actor, DBMessage::Drain);
                         return_map.map.extend(actor_hashmap.unwrap());
 
@@ -311,7 +311,7 @@ impl Actor for NodeManagerActor {
                 let mut ret = Vec::with_capacity(sessions.len());
                 for session in sessions.values() {
                     let addr = &session.peer_addr;
-                    info!("Connected to: {}", addr);
+                    info!("Connected to: {addr}");
                     ret.push(String::from(addr))
                 }
 
@@ -372,7 +372,7 @@ impl Actor for NodeManagerActor {
                     warn!("  Received state")
                 }
                 if let Some(reason) = _opt_reason {
-                    warn!("  Reason: {}", reason)
+                    warn!("  Reason: {reason}")
                 }
             }
             ActorFailed(_actor, _err) => {

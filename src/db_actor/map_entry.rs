@@ -52,8 +52,8 @@ impl From<&MapEntry> for OwnedFrame {
 impl Display for MapEntry {
     fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
         match self {
-            MapEntry::STRING(a) => write!(f, "{}", a),
-            MapEntry::USIZE(a) => write!(f, "{}", a),
+            MapEntry::STRING(a) => write!(f, "{a}"),
+            MapEntry::USIZE(a) => write!(f, "{a}"),
         }
     }
 }

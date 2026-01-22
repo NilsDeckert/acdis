@@ -21,7 +21,7 @@ serde = { version = "1.0", features = ["derive"] }
 rand = "0.8.5"
 crc16 = "0.4.0"
 rangemap = "1.5.1"
-lru = "0.13.0"
+lru = "0.16.3"
 
 [dev-dependencies]
 criterion = { version = "0.5", features = ["html_reports", "async_tokio"] }

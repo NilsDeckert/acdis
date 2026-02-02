@@ -85,7 +85,7 @@ impl Actor for NodeManagerActor {
             }
         }
 
-        let redis_host = Self::spawn_redis_access_point(own_address).await?;
+        let _redis_host = Self::spawn_redis_access_point("0.0.0.0".into()).await?;
 
         myself.send_message(Init)?;
 
@@ -94,7 +94,7 @@ impl Actor for NodeManagerActor {
             db_actors: HashMap::default(),
             node_server: pmd_ref,
             other_nodes: HashMap::default(),
-            redis_host,
+            redis_host: (own_address, 6379 as u16),
         })
     }
 

@@ -15,6 +15,22 @@ mod tcp_writer_actor;
 
 mod hash_slot;
 
+// CLI argument parsing
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+
+    /// Address of this node
+    #[arg(long, default_value_t=String::from("0.0.0.0"))]
+    host: String,
+
+    /// Port for internode communication
+    #[arg(short, long, default_value_t=16379)]
+    port: u16,
+}
+
 fn setup_logging() {
     let logconfig = ConfigBuilder::new()
         .set_level_color(Level::Error, Some(Color::Red))
@@ -44,10 +60,12 @@ fn setup_logging() {
 async fn main() {
     setup_logging();
 
+    let args = Args::parse();
+
     let (_manager_ref, manager_handler) = Actor::spawn(
         Some(String::from("NodeManager")),
         NodeManagerActor,
-        (NodeType::Server, String::from("localhost"), 6379),
+        (NodeType::Server, args.host, args.port),
     )
     .await
     .expect("Failed to spawn node manager");

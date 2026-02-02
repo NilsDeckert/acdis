@@ -47,7 +47,7 @@ impl Actor for NodeManagerActor {
         // Set arguments that differ between server and client
         match args.0 {
             NodeType::Server => {
-                port = cluster_host_port;
+                port = client_port;
                 name = String::from("host_node");
             }
             NodeType::Client => {
@@ -59,7 +59,7 @@ impl Actor for NodeManagerActor {
             }
         }
 
-        let pmd_ref = NodeManagerActor::spawn_pmd(args.1, port, name).await;
+        let pmd_ref = NodeManagerActor::spawn_pmd(args.1.clone(), port, name).await;
         NodeManagerActor::subscribe_to_events(myself.clone(), pmd_ref.clone()).await;
 
         // If NodeType is Client, we assume there is already another NodeServer accepting connections
@@ -67,7 +67,7 @@ impl Actor for NodeManagerActor {
             loop {
                 match ractor_cluster::client_connect(
                     &pmd_ref,
-                    format!("{cluster_host_address}:{cluster_host_port}"),
+                    format!("{}:{cluster_host_port}", args.1),
                 )
                 .await
                 {

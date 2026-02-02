@@ -153,7 +153,7 @@ impl NodeManagerActor {
     /// Return address and port of cluster master.
     ///
     /// Uses environment values CLUSTER_HOST & CLUSTER_PORT or default
-    /// values `127.0.0.1` & `6381`
+    /// values `127.0.0.1` & `16379`
     ///
     /// # Returns
     ///  - Address to connect to
@@ -161,7 +161,7 @@ impl NodeManagerActor {
     pub(crate) fn get_host_address() -> (String, u16) {
         let cluster_host_address = std::env::var("CLUSTER_HOST").unwrap_or("127.0.0.1".to_string());
         let cluster_host_port = std::env::var("CLUSTER_PORT")
-            .unwrap_or(String::from("6381"))
+            .unwrap_or(String::from("16379"))
             .parse()
             .unwrap();
         (cluster_host_address, cluster_host_port)

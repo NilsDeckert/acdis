@@ -23,7 +23,7 @@ const INITIAL_DB_ACTORS: u16 = 16;
 impl Actor for NodeManagerActor {
     type Msg = NodeManagerMessage;
     type State = NodeManagerActorState;
-    type Arguments = (NodeType, String, u16);
+    type Arguments = (NodeType, String, String, u16);
 
     async fn pre_start(
         &self,
@@ -33,8 +33,9 @@ impl Actor for NodeManagerActor {
         /* Address of cluster master */
         let (cluster_host_address, cluster_host_port) = Self::get_host_address();
 
-        // This is the port for internode communication
-        let client_port = args.2;
+        let own_address = args.1;
+        let cluster_manager_address = args.2;
+        let client_port = args.3; // This is the port for internode communication
 
         let port: u16;
         let name;
@@ -59,7 +60,7 @@ impl Actor for NodeManagerActor {
             }
         }
 
-        let pmd_ref = NodeManagerActor::spawn_pmd(args.1.clone(), port, name).await;
+        let pmd_ref = NodeManagerActor::spawn_pmd(own_address.clone(), port, name).await;
         NodeManagerActor::subscribe_to_events(myself.clone(), pmd_ref.clone()).await;
 
         // If NodeType is Client, we assume there is already another NodeServer accepting connections
@@ -67,7 +68,7 @@ impl Actor for NodeManagerActor {
             loop {
                 match ractor_cluster::client_connect(
                     &pmd_ref,
-                    format!("{}:{cluster_host_port}", args.1),
+                    format!("{cluster_manager_address}:{cluster_host_port}"),
                 )
                 .await
                 {
@@ -84,7 +85,7 @@ impl Actor for NodeManagerActor {
             }
         }
 
-        let redis_host = Self::spawn_redis_access_point().await?;
+        let redis_host = Self::spawn_redis_access_point(own_address).await?;
 
         myself.send_message(Init)?;
 

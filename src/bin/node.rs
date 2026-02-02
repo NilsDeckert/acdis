@@ -23,7 +23,11 @@ struct Args {
 
     /// Address of the cluster manager
     #[arg(long, default_value_t=String::from("localhost"))]
-    host: String,
+    manager: String,
+
+    /// Address of the cluster manager
+    #[arg(long, default_value_t=String::from("localhost"))]
+    own: String,
 
     /// Port for internode communication
     #[arg(short, long, default_value_t=16379)]
@@ -65,7 +69,7 @@ async fn main() {
         //Some(String::from("ClusterNodeManager")), // Same name leads to problems
         None,
         NodeManagerActor,
-        (NodeType::Client, args.host, args.port),
+        (NodeType::Client, args.own, args.manager, args.port),
     )
     .await
     .expect("Failed to spawn node manager");

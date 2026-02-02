@@ -24,11 +24,15 @@ struct Args {
 
     /// Address of this node
     #[arg(long, default_value_t=String::from("0.0.0.0"))]
-    host: String,
+    own: String,
 
     /// Port for internode communication
     #[arg(short, long, default_value_t=16379)]
     port: u16,
+
+    /// NOT USED here
+    #[arg(long, default_value_t=String::from("localhost"))]
+    manager: String,
 }
 
 fn setup_logging() {
@@ -65,7 +69,7 @@ async fn main() {
     let (_manager_ref, manager_handler) = Actor::spawn(
         Some(String::from("NodeManager")),
         NodeManagerActor,
-        (NodeType::Server, args.host, args.port),
+        (NodeType::Server, args.own, args.manager, args.port),
     )
     .await
     .expect("Failed to spawn node manager");

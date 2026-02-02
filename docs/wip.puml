@@ -1,0 +1,30 @@
+@startuml
+
+title "Spawn Graph"
+
+package "acdis" {
+
+package "node" {
+    agent "NodeManager" as NM
+    database "DbActor 1" as DB1
+    database "DbActor 2" as DB2
+    database "DbActor 3" as DB3
+    NM -down-> DB1
+    NM -down-> DB2
+    NM -down-> DB3
+}
+
+agent "TcpListener" as TcpListener
+agent "TcpReader"as TcpReader
+agent "TcpWriter" as TcpWriter
+
+TcpListener -down-> TcpReader
+TcpListener -down-> TcpWriter
+
+agent "ParserActor" as Parser
+TcpReader -down-> Parser
+
+}
+
+
+@enduml

@@ -24,13 +24,13 @@ pub enum NodeType {
 impl NodeManagerActor {
     /// Initialize and spawn a [`NodeServer`], thus accepting connections for communication across
     /// nodes.
-    pub(crate) async fn spawn_pmd(port: u16, name: String) -> ActorRef<NodeServerMessage> {
+    pub(crate) async fn spawn_pmd(addr: String, port: u16, name: String) -> ActorRef<NodeServerMessage> {
         // Init port mapper daemon that handles internode communication
         let pmd = NodeServer::new(
             port,
             std::env::var("CLUSTER_COOKIE").unwrap_or(String::from("cookie")),
             name,
-            String::from("localhost"), // TODO: This is the String used by other nodes connecting to us. Use IP so it works across the network
+            addr.clone(),
             Some(IncomingEncryptionMode::Raw),
             Some(NodeConnectionMode::Transitive),
         );
@@ -39,6 +39,8 @@ impl NodeManagerActor {
         let (pmd_ref, _pmd_handler) = Actor::spawn(Some(String::from("NodeServer")), pmd, ())
             .await
             .expect("Failed to spawn port mapper daemon");
+
+        info!("Listening on {addr}:{port}");
 
         pmd_ref
     }

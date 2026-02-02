@@ -14,6 +14,22 @@ use acdis::node_manager_actor::actor::{NodeManagerActor, NodeType};
 
 use rand::Rng;
 
+// CLI argument parsing
+use clap::Parser;
+
+#[derive(Parser, Debug)]
+#[command(version, about, long_about = None)]
+struct Args {
+
+    /// Address of the cluster manager
+    #[arg(long, default_value_t=String::from("localhost"))]
+    host: String,
+
+    /// Port for internode communication
+    #[arg(short, long, default_value_t=16379)]
+    port: u16,
+}
+
 fn setup_logging() {
     let logconfig = ConfigBuilder::new()
         .set_level_color(Level::Error, Some(Color::Red))
@@ -43,11 +59,13 @@ fn setup_logging() {
 async fn main() {
     setup_logging();
 
+    let args = Args::parse();
+
     let (manager_ref, manager_handler) = Actor::spawn(
         //Some(String::from("ClusterNodeManager")), // Same name leads to problems
         None,
         NodeManagerActor,
-        NodeType::Client,
+        (NodeType::Client, args.host, args.port),
     )
     .await
     .expect("Failed to spawn node manager");

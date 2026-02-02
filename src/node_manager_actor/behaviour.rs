@@ -23,7 +23,7 @@ const INITIAL_DB_ACTORS: u16 = 16;
 impl Actor for NodeManagerActor {
     type Msg = NodeManagerMessage;
     type State = NodeManagerActorState;
-    type Arguments = NodeType;
+    type Arguments = (NodeType, String, u16);
 
     async fn pre_start(
         &self,
@@ -33,24 +33,22 @@ impl Actor for NodeManagerActor {
         /* Address of cluster master */
         let (cluster_host_address, cluster_host_port) = Self::get_host_address();
 
-        let client_port = std::env::var("CLIENT_PORT")
-            .unwrap_or(String::from("0")) // Let OS choose port
-            .parse()
-            .unwrap();
+        // This is the port for internode communication
+        let client_port = args.2;
 
-        let port;
+        let port: u16;
         let name;
 
+        // Use default redis port if nothing else was specified via env variables
+        if std::env::var("REDIS_PORT").is_err() {
+            std::env::set_var("REDIS_PORT", "6379")
+        }
+
         // Set arguments that differ between server and client
-        match args {
+        match args.0 {
             NodeType::Server => {
                 port = cluster_host_port;
                 name = String::from("host_node");
-
-                // Use default redis port if nothing else was specified via env variables
-                if std::env::var("REDIS_PORT").is_err() {
-                    std::env::set_var("REDIS_PORT", "6379")
-                }
             }
             NodeType::Client => {
                 let mut rng = rand::thread_rng();
@@ -61,11 +59,11 @@ impl Actor for NodeManagerActor {
             }
         }
 
-        let pmd_ref = NodeManagerActor::spawn_pmd(port, name).await;
+        let pmd_ref = NodeManagerActor::spawn_pmd(args.1, port, name).await;
         NodeManagerActor::subscribe_to_events(myself.clone(), pmd_ref.clone()).await;
 
         // If NodeType is Client, we assume there is already another NodeServer accepting connections
-        if let NodeType::Client = args {
+        if let NodeType::Client = args.0 {
             loop {
                 match ractor_cluster::client_connect(
                     &pmd_ref,

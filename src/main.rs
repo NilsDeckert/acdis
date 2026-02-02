@@ -47,7 +47,7 @@ async fn main() {
     let (_manager_ref, manager_handler) = Actor::spawn(
         Some(String::from("NodeManager")),
         NodeManagerActor,
-        NodeType::Server,
+        (NodeType::Server, String::from("localhost"), 6379),
     )
     .await
     .expect("Failed to spawn node manager");

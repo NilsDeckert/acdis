@@ -201,6 +201,9 @@ impl DBActor {
             }
         }
 
+        // Adapt hashmap size
+        map.map.shrink_to_fit();
+
         Ok(count.as_frame())
     }
 }

@@ -74,7 +74,7 @@ impl NodeManagerActorState {
         hashslot: &HashSlot,
     ) -> Option<ActorRef<DBMessage>> {
         if !self.keyspace.contains(hashslot) {
-            error!(
+            info!(
                 "Tried to find actor for hash {:?}, but we only manage {}",
                 &hashslot, self.keyspace
             );

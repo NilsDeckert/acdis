@@ -109,7 +109,7 @@ impl Actor for TcpReaderActor {
 async fn write_stream_to_buf(stream: &mut OwnedReadHalf, buf: &mut [u8; MAX_MSG_LEN]) -> bool {
     match stream.read(buf).await {
         Ok(0) => {
-            warn!("Client closed channel {}", stream.peer_addr().unwrap());
+            info!("Client closed channel {}", stream.peer_addr().unwrap());
         }
         Ok(_) => return true,
         Err(e) => {
